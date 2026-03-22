@@ -2,7 +2,9 @@ name: Deploy Lambda with AWS SAM
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main  
+      - develop
 
 jobs:
   build-and-deploy:
