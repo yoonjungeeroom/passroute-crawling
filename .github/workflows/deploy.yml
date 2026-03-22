@@ -18,9 +18,13 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: src/requirements.txt
 
       - name: Setup SAM
         uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true 
 
       - name: Install dependencies
         run: pip install -r src/requirements.txt
@@ -33,7 +37,7 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: SAM Build
-        run: sam build
+        run: sam build --cached 
 
       - name: SAM Deploy
         run: |
