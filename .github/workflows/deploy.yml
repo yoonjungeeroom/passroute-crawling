@@ -40,5 +40,5 @@ jobs:
             --stack-name passroute-crawler-${{ github.ref_name }} \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
-            --capabilities CAPABILITY_IAM
+            --capabilities CAPABILITY_IAM \
             --resolve-s3
