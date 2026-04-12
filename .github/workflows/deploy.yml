@@ -47,5 +47,4 @@ jobs:
             --capabilities CAPABILITY_IAM \
             --resolve-s3 \
             --parameter-overrides \
-              ChromaDBHost=${{ secrets.CHROMADB_HOST }} \
-              ChromaDBPort=${{ secrets.CHROMADB_PORT }}
+              S3BucketName=${{ secrets.S3_BUCKET_NAME }}

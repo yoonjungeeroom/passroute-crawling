@@ -4,14 +4,10 @@ Description: >
   passroute-crawler — 잡코리아 JD 크롤링 파이프라인
 
 Parameters:
-  ChromaDBHost:
+  S3BucketName:
     Type: String
-    Description: ChromaDB 서버 호스트
-    Default: localhost
-  ChromaDBPort:
-    Type: String
-    Description: ChromaDB 서버 포트
-    Default: '8000'
+    Description: 크롤링 데이터 중간 저장 S3 버킷명
+    Default: passroute-crawler-data-0607
 
 Globals:
   Function:
@@ -23,10 +19,21 @@ Globals:
       LogFormat: JSON
     Environment:
       Variables:
-        CHROMADB_HOST: !Ref ChromaDBHost
-        CHROMADB_PORT: !Ref ChromaDBPort
+        S3_BUCKET: !Ref CrawlerDataBucket
 
 Resources:
+  # ── S3: 크롤링 데이터 중간 저장 버킷 ──
+  CrawlerDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref S3BucketName
+      LifecycleConfiguration:
+        Rules:
+          - Id: CleanupFailedPrefix
+            Prefix: failed/
+            Status: Enabled
+            ExpirationInDays: 30
+
   # ── SQS: 공고 단위 상세 크롤링 큐 ──
   JobDetailQueue:
     Type: AWS::SQS::Queue
@@ -59,6 +66,8 @@ Resources:
       Policies:
         - SQSSendMessagePolicy:
             QueueName: !GetAtt JobDetailQueue.QueueName
+        - S3CrudPolicy:
+            BucketName: !Ref CrawlerDataBucket
       Events:
         DailySchedule:
           Type: Schedule
@@ -103,6 +112,9 @@ Resources:
       Timeout: 60
       MemorySize: 256
       ReservedConcurrentExecutions: 10
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref CrawlerDataBucket
       Events:
         SQSTrigger:
           Type: SQS
@@ -120,6 +132,9 @@ Outputs:
   JobDetailQueueUrl:
     Description: 상세 SQS Queue URL
     Value: !Ref JobDetailQueue
+  CrawlerDataBucketName:
+    Description: 크롤링 데이터 S3 버킷명
+    Value: !Ref CrawlerDataBucket
   DLQAlarmTopicArn:
     Description: DLQ 알람 SNS 토픽 ARN (구독은 콘솔에서 수동 추가)
     Value: !Ref DLQAlarmTopic
