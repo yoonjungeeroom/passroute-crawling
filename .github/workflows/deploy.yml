@@ -45,4 +45,7 @@ jobs:
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
             --capabilities CAPABILITY_IAM \
-            --resolve-s3
+            --resolve-s3 \
+            --parameter-overrides \
+              ChromaDBHost=${{ secrets.CHROMADB_HOST }} \
+              ChromaDBPort=${{ secrets.CHROMADB_PORT }}
