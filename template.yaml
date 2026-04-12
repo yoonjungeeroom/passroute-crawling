@@ -20,6 +20,7 @@ Globals:
     Environment:
       Variables:
         S3_BUCKET: !Ref CrawlerDataBucket
+        JOBKOREA_MAX_PAGES: '2'
 
 Resources:
   # ── S3: 크롤링 데이터 중간 저장 버킷 ──
