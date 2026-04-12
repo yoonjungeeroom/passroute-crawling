@@ -1,6 +1,6 @@
 """app.py 의 Lambda 핸들러 2개에 대한 단위 테스트.
 
-외부 I/O(SQS, ChromaDB, 크롤러)는 전부 mock 으로 대체한다.
+외부 I/O(SQS, S3, 크롤러)는 전부 mock 으로 대체한다.
 크롤러는 ``app.get_crawler`` 를 패치하여 source 문자열에 무관하게 같은 mock 을 돌려주도록 한다.
 
 테스트는 "한 케이스 = 한 동작" 원칙으로 작성한다. 배치 크기 같은 구현 세부 수치에는
@@ -65,12 +65,12 @@ def _detail(**overrides) -> JobDetail:
 
 
 @patch("app.boto3.client")
-@patch("app.ChromaDBStorage")
+@patch("app.S3Storage")
 @patch("app.get_crawler")
 def test_job_list_collector_dispatches_only_new_jobs(
     mock_get_crawler, mock_storage_cls, mock_boto_client
 ):
-    """ChromaDB 에 없는 신규 공고만 JobDetailQueue 로 전송되어야 한다."""
+    """S3 URL 인덱스에 없는 신규 공고만 JobDetailQueue 로 전송되어야 한다."""
     mock_sqs = MagicMock()
     mock_boto_client.return_value = mock_sqs
 
@@ -99,7 +99,7 @@ def test_job_list_collector_dispatches_only_new_jobs(
 
 
 @patch("app.boto3.client")
-@patch("app.ChromaDBStorage")
+@patch("app.S3Storage")
 @patch("app.get_crawler")
 def test_job_list_collector_deletes_expired_before_dispatch(
     mock_get_crawler, mock_storage_cls, mock_boto_client
@@ -120,7 +120,7 @@ def test_job_list_collector_deletes_expired_before_dispatch(
 
 
 @patch("app.boto3.client")
-@patch("app.ChromaDBStorage")
+@patch("app.S3Storage")
 @patch("app.get_crawler")
 def test_job_list_collector_sends_nothing_when_all_existing(
     mock_get_crawler, mock_storage_cls, mock_boto_client
@@ -146,7 +146,7 @@ def test_job_list_collector_sends_nothing_when_all_existing(
 
 
 @patch("app.boto3.client")
-@patch("app.ChromaDBStorage")
+@patch("app.S3Storage")
 @patch("app.get_crawler")
 def test_job_list_collector_returns_counts_in_body(
     mock_get_crawler, mock_storage_cls, mock_boto_client
@@ -154,7 +154,7 @@ def test_job_list_collector_returns_counts_in_body(
     """응답 body 에 신규 전송 건수와 삭제 건수가 포함되어야 한다."""
     mock_boto_client.return_value = MagicMock()
     mock_storage = MagicMock()
-    mock_storage.delete_expired.return_value = 7
+    mock_storage.delete_expired.return_value = 0
     mock_storage.get_all_urls.return_value = set()
     mock_storage_cls.return_value = mock_storage
     mock_crawler = MagicMock()
@@ -165,11 +165,11 @@ def test_job_list_collector_returns_counts_in_body(
 
     assert result["statusCode"] == 200
     body = json.loads(result["body"])
-    assert body == {"new": 1, "deleted": 7}
+    assert body == {"new": 1, "deleted": 0}
 
 
 @patch("app.boto3.client")
-@patch("app.ChromaDBStorage")
+@patch("app.S3Storage")
 def test_job_list_collector_fails_fast_when_queue_url_missing(
     mock_storage_cls, mock_boto_client, monkeypatch
 ):
@@ -187,7 +187,7 @@ def test_job_list_collector_fails_fast_when_queue_url_missing(
 # ─────────────────────────────────────────────────────────
 
 
-@patch("app.ChromaDBStorage")
+@patch("app.S3Storage")
 @patch("app.get_crawler")
 def test_job_detail_crawler_saves_fetched_detail(mock_get_crawler, mock_storage_cls):
     """상세 크롤링 성공 시 storage.save 가 호출되어야 한다."""
@@ -212,7 +212,7 @@ def test_job_detail_crawler_saves_fetched_detail(mock_get_crawler, mock_storage_
     assert isinstance(saved, JobDetail)
 
 
-@patch("app.ChromaDBStorage")
+@patch("app.S3Storage")
 @patch("app.get_crawler")
 def test_job_detail_crawler_skips_when_fetch_returns_none(
     mock_get_crawler, mock_storage_cls
@@ -237,7 +237,7 @@ def test_job_detail_crawler_skips_when_fetch_returns_none(
     mock_storage.save.assert_not_called()
 
 
-@patch("app.ChromaDBStorage")
+@patch("app.S3Storage")
 @patch("app.get_crawler")
 def test_job_detail_crawler_reraises_on_failure(mock_get_crawler, mock_storage_cls):
     """크롤링 예외 발생 시 SQS 재시도를 위해 예외가 다시 던져져야 한다."""

@@ -1,6 +1,6 @@
 """passroute-crawler Lambda 핸들러.
 
-EventBridge cron → [job_list_collector] → SQS → [job_detail_crawler] → ChromaDB
+EventBridge cron → [job_list_collector] → SQS → [job_detail_crawler] → S3 → EC2 consumer → ChromaDB
 """
 import json
 import logging
@@ -11,7 +11,7 @@ import boto3
 
 from crawler.base import JobDetail, JobListingRef
 from crawler.registry import get_crawler, iter_sources
-from storage.chromadb import ChromaDBStorage
+from storage.s3 import S3Storage
 
 logger = logging.getLogger(__name__)
 
@@ -26,11 +26,8 @@ def _required_env(name: str) -> str:
     return val
 
 
-def _make_storage() -> ChromaDBStorage:
-    return ChromaDBStorage(
-        host=_required_env("CHROMADB_HOST"),
-        port=int(_required_env("CHROMADB_PORT")),
-    )
+def _make_storage() -> S3Storage:
+    return S3Storage(bucket=_required_env("S3_BUCKET"))
 
 
 # ── Lambda 1: 목록 수집 (cron) ──
@@ -99,7 +96,7 @@ def _dispatch_new_listings(
 
 
 def job_detail_crawler(event, context):
-    """SQS 트리거. 공고 1건 상세 크롤링 → ChromaDB 저장."""
+    """SQS 트리거. 공고 1건 상세 크롤링 → S3 저장."""
     storage = _make_storage()
 
     for record in event["Records"]:
