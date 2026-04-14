@@ -1,26 +1,141 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  passroute-crawler
+  passroute-crawler — 잡코리아 JD 크롤링 파이프라인
+
+Parameters:
+  S3BucketName:
+    Type: String
+    Description: 크롤링 데이터 중간 저장 S3 버킷명
+    Default: passroute-crawler-data-0607
 
 Globals:
   Function:
+    Runtime: python3.11
+    Architectures:
+      - x86_64
     Timeout: 300
     LoggingConfig:
       LogFormat: JSON
+    Environment:
+      Variables:
+        S3_BUCKET: !Ref CrawlerDataBucket
+        JOBKOREA_MAX_PAGES: '2'
 
 Resources:
-  HelloWorldFunction:
-    Type: AWS::Serverless::Function 
+  # ── S3: 크롤링 데이터 중간 저장 버킷 ──
+  CrawlerDataBucket:
+    Type: AWS::S3::Bucket
     Properties:
+      BucketName: !Ref S3BucketName
+      LifecycleConfiguration:
+        Rules:
+          - Id: CleanupFailedPrefix
+            Prefix: failed/
+            Status: Enabled
+            ExpirationInDays: 30
+
+  # ── SQS: 공고 단위 상세 크롤링 큐 ──
+  JobDetailQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: passroute-job-detail-queue
+      VisibilityTimeout: 360
+      MessageRetentionPeriod: 86400
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt JobDetailDLQ.Arn
+        maxReceiveCount: 3
+
+  JobDetailDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: passroute-job-detail-dlq
+      MessageRetentionPeriod: 604800
+
+  # ── Lambda 1: 목록 수집 (cron) ──
+  JobListCollector:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: passroute-job-list-collector
       CodeUri: src/
-      Handler: app.lambda_handler
-      Runtime: python3.11
-      Architectures:
-      - x86_64
+      Handler: app.job_list_collector
+      Timeout: 900
+      MemorySize: 512
+      Environment:
+        Variables:
+          JOB_DETAIL_QUEUE_URL: !Ref JobDetailQueue
+      Policies:
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt JobDetailQueue.QueueName
+        - S3CrudPolicy:
+            BucketName: !Ref CrawlerDataBucket
       Events:
-        ScheduleEvent:
+        DailySchedule:
           Type: Schedule
           Properties:
             Schedule: cron(0 18 * * ? *)
-            Enabled: false 
+            Enabled: false
+
+  # ── DLQ 알람 ──
+  # SNS 토픽만 생성해두고 구독(이메일/슬랙)은 콘솔에서 수동 추가.
+  DLQAlarmTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: passroute-dlq-alarm
+      DisplayName: passroute DLQ Alarm
+
+  JobDetailDLQAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: passroute-job-detail-dlq-has-messages
+      AlarmDescription: passroute job detail DLQ에 메시지가 쌓여 있음 (상세 크롤링 실패 누적)
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt JobDetailDLQ.QueueName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref DLQAlarmTopic
+
+  # ── Lambda 2: 상세 크롤러 ──
+  JobDetailCrawler:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: passroute-job-detail-crawler
+      CodeUri: src/
+      Handler: app.job_detail_crawler
+      Timeout: 60
+      MemorySize: 256
+      ReservedConcurrentExecutions: 10
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref CrawlerDataBucket
+      Events:
+        SQSTrigger:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt JobDetailQueue.Arn
+            BatchSize: 1
+
+Outputs:
+  JobListCollectorArn:
+    Description: 목록 수집 Lambda ARN
+    Value: !GetAtt JobListCollector.Arn
+  JobDetailCrawlerArn:
+    Description: 상세 크롤링 Lambda ARN
+    Value: !GetAtt JobDetailCrawler.Arn
+  JobDetailQueueUrl:
+    Description: 상세 SQS Queue URL
+    Value: !Ref JobDetailQueue
+  CrawlerDataBucketName:
+    Description: 크롤링 데이터 S3 버킷명
+    Value: !Ref CrawlerDataBucket
+  DLQAlarmTopicArn:
+    Description: DLQ 알람 SNS 토픽 ARN (구독은 콘솔에서 수동 추가)
+    Value: !Ref DLQAlarmTopic

@@ -45,4 +45,6 @@ jobs:
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
             --capabilities CAPABILITY_IAM \
-            --resolve-s3
+            --resolve-s3 \
+            --parameter-overrides \
+              S3BucketName=${{ secrets.S3_BUCKET_NAME }}
