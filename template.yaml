@@ -112,7 +112,6 @@ Resources:
       Handler: app.job_detail_crawler
       Timeout: 60
       MemorySize: 256
-      ReservedConcurrentExecutions: 10
       Policies:
         - S3CrudPolicy:
             BucketName: !Ref CrawlerDataBucket
