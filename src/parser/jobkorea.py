@@ -188,6 +188,7 @@ _NON_TECH_NAMES: frozenset[str] = frozenset({
 
 def _is_non_tech_skill(name: str) -> bool:
     """자격증·어학·비기술 항목이면 True."""
-    if _CERT_PATTERN.search(name):
+    cleaned = name.strip()
+    if _CERT_PATTERN.search(cleaned):
         return True
-    return name.lower().strip() in _NON_TECH_NAMES
+    return cleaned.lower() in _NON_TECH_NAMES
