@@ -9,7 +9,7 @@ from crawler.base import JobDetail
 
 logger = logging.getLogger(__name__)
 
-EMBEDDING_MODEL = "jhgan/ko-sroberta-multitask"
+EMBEDDING_MODEL = "BAAI/bge-m3"
 _URL_FETCH_CHUNK = 1000
 
 
