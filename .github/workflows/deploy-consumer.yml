@@ -36,26 +36,32 @@ jobs:
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build, tag, and push image to ECR
         id: build
-        env:
-          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
-          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker build -f consumer/Dockerfile \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: consumer/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:${{ github.sha }}
+            ${{ steps.ecr-login.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Set image output
+        id: image
+        run: echo "image=${{ steps.ecr-login.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:${{ github.sha }}" >> $GITHUB_OUTPUT
 
       - name: Deploy to EC2
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USER: ${{ secrets.EC2_USER }}
           EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-          ECR_IMAGE: ${{ steps.build.outputs.image }}
+          ECR_IMAGE: ${{ steps.image.outputs.image }}
           ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
         run: |
           echo "$EC2_SSH_KEY" > /tmp/ec2_key.pem
