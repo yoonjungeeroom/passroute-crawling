@@ -1,0 +1,13 @@
+.git
+.github
+__pycache__
+*.pyc
+tests/
+docs/
+events/
+ocr/
+scripts/
+template.yaml
+samconfig.toml
+CLAUDE.md
+.env
