@@ -5,6 +5,9 @@ WORKDIR /app
 COPY consumer/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# 한국어 임베딩 모델 사전 다운로드 (콜드스타트 방지)
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('jhgan/ko-sroberta-multitask')"
+
 # 공유 모듈 복사
 COPY src/storage/chromadb.py ./storage/chromadb.py
 COPY src/crawler/base.py ./crawler/base.py

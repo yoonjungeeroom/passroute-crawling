@@ -3,11 +3,13 @@ import logging
 from collections.abc import Iterable
 
 import chromadb
+from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
 
 from crawler.base import JobDetail
 
 logger = logging.getLogger(__name__)
 
+EMBEDDING_MODEL = "jhgan/ko-sroberta-multitask"
 _URL_FETCH_CHUNK = 1000
 
 
@@ -15,7 +17,11 @@ class ChromaDBStorage:
 
     def __init__(self, host: str, port: int, collection_name: str = "job_descriptions"):
         self.client = chromadb.HttpClient(host=host, port=port)
-        self.collection = self.client.get_or_create_collection(name=collection_name)
+        embedding_fn = SentenceTransformerEmbeddingFunction(model_name=EMBEDDING_MODEL)
+        self.collection = self.client.get_or_create_collection(
+            name=collection_name,
+            embedding_function=embedding_fn,
+        )
 
     def save(self, detail: JobDetail) -> None:
         """raw_text + tech_stack 을 document 로, 나머지를 metadata 로 저장."""

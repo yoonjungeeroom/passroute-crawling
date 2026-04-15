@@ -1,2 +1,3 @@
 chromadb-client
 boto3
+sentence-transformers
