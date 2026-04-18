@@ -98,7 +98,7 @@ def test_process_delete_requests_calls_delete_expired():
     """삭제 요청 파일을 읽어 storage.delete_expired 를 호출한다."""
     mock_s3 = _mock_s3_list(["delete-requests/20260412T180000.json"])
     _mock_s3_get_object(mock_s3, {
-        "now_iso": "2026-04-12T18:00:00+09:00",
+        "now_ts": 1776164400,
         "requested_at": "20260412T180000",
     })
 
@@ -108,7 +108,25 @@ def test_process_delete_requests_calls_delete_expired():
     deleted = process_delete_requests(mock_s3, "test-bucket", mock_storage)
 
     assert deleted == 3
-    mock_storage.delete_expired.assert_called_once_with("2026-04-12T18:00:00+09:00")
+    mock_storage.delete_expired.assert_called_once_with(1776164400)
+
+
+def test_process_delete_requests_legacy_now_iso():
+    """기존 now_iso 형식의 삭제 요청도 timestamp 로 변환하여 처리한다."""
+    mock_s3 = _mock_s3_list(["delete-requests/20260412T180000.json"])
+    _mock_s3_get_object(mock_s3, {
+        "now_iso": "2026-04-12T18:00:00+09:00",
+        "requested_at": "20260412T180000",
+    })
+
+    mock_storage = MagicMock()
+    mock_storage.delete_expired.return_value = 1
+
+    deleted = process_delete_requests(mock_s3, "test-bucket", mock_storage)
+
+    assert deleted == 1
+    call_args = mock_storage.delete_expired.call_args.args[0]
+    assert isinstance(call_args, int)
     mock_s3.delete_object.assert_called_once_with(
         Bucket="test-bucket", Key="delete-requests/20260412T180000.json",
     )
