@@ -25,6 +25,7 @@ class JobkoreaListItem:
     job_id: str
     title: str
     company_name: str
+    career_level: str = ""
 
 
 def parse_job_list(html: str) -> list[JobkoreaListItem]:
@@ -40,10 +41,17 @@ def parse_job_list(html: str) -> list[JobkoreaListItem]:
         if not match:
             continue
         company_tag = row.select_one('a[href*="/Recruit/Co_Read/"]')
+        career_level = ""
+        etc_tag = row.select_one("p.etc")
+        if etc_tag:
+            first_cell = etc_tag.select_one("span.cell")
+            if first_cell:
+                career_level = first_cell.get_text(strip=True)
         jobs.append(JobkoreaListItem(
             job_id=match.group(1),
             title=link.get_text(strip=True),
             company_name=company_tag.get_text(strip=True) if company_tag else "",
+            career_level=career_level,
         ))
 
     return jobs

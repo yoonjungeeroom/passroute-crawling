@@ -128,6 +128,7 @@ class JobKoreaCrawler(JobCrawler):
                 url=self.detail_url(item.job_id),
                 title=item.title,
                 company_name=item.company_name,
+                career_level=item.career_level,
             )
             for item in parse_job_list(resp.text)
         ]
@@ -159,6 +160,7 @@ class JobKoreaCrawler(JobCrawler):
             tech_stack=metadata.tech_stack,
             deadline=metadata.deadline,
             crawled_at=datetime.now(KST).isoformat(),
+            career_level=ref.career_level,
         )
 
 

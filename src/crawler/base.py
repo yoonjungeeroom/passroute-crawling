@@ -17,6 +17,7 @@ class JobListingRef:
     url: str
     title: str
     company_name: str
+    career_level: str = ""
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,7 @@ class JobDetail:
     tech_stack: tuple[str, ...]
     deadline: str
     crawled_at: str
+    career_level: str = ""
 
 
 DEFAULT_DELAY_MIN = 1.0

@@ -44,6 +44,7 @@ class S3Storage:
             "tech_stack": list(detail.tech_stack),
             "deadline": detail.deadline,
             "crawled_at": detail.crawled_at,
+            "career_level": detail.career_level,
         }
         if embedding is not None:
             data["embedding"] = embedding

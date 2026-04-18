@@ -55,6 +55,7 @@ def process_parsed_files(s3, bucket: str, storage: ChromaDBStorage) -> int:
                     tech_stack=tuple(data.get("tech_stack", [])),
                     deadline=data.get("deadline", ""),
                     crawled_at=data["crawled_at"],
+                    career_level=data.get("career_level", ""),
                 )
 
                 embedding = data.get("embedding")
