@@ -31,10 +31,10 @@ class S3Storage:
                 return set()
             raise
 
-    def save(self, detail: JobDetail) -> None:
+    def save(self, detail: JobDetail, *, embedding: list[float] | None = None) -> None:
         """크롤링 결과를 parsed/{source}/{external_id}.json 으로 S3 에 저장."""
         key = f"parsed/{detail.source}/{detail.external_id}.json"
-        body = json.dumps({
+        data = {
             "source": detail.source,
             "external_id": detail.external_id,
             "url": detail.url,
@@ -44,7 +44,10 @@ class S3Storage:
             "tech_stack": list(detail.tech_stack),
             "deadline": detail.deadline,
             "crawled_at": detail.crawled_at,
-        }, ensure_ascii=False)
+        }
+        if embedding is not None:
+            data["embedding"] = embedding
+        body = json.dumps(data, ensure_ascii=False)
 
         self.s3.put_object(Bucket=self.bucket, Key=key, Body=body.encode("utf-8"))
         logger.info("S3 저장 완료: %s", key)

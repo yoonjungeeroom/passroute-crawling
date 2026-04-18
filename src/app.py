@@ -11,6 +11,7 @@ import boto3
 
 from crawler.base import JobDetail, JobListingRef
 from crawler.registry import get_crawler, iter_sources
+from embedding import build_document, embed_text
 from storage.s3 import S3Storage
 
 logger = logging.getLogger(__name__)
@@ -117,7 +118,10 @@ def job_detail_crawler(event, context):
             if detail is None:
                 logger.info("텍스트 JD 없음, 스킵: id=%s", ref.external_id)
                 continue
-            storage.save(detail)
+
+            document = build_document(detail.raw_text, detail.tech_stack)
+            embedding = embed_text(document)
+            storage.save(detail, embedding=embedding)
         except Exception:
             logger.exception("상세 크롤링 실패: id=%s", ref.external_id)
             raise
