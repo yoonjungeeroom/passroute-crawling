@@ -19,5 +19,14 @@ services:
       - chromadb
     restart: unless-stopped
 
+  ocr:
+    build:
+      context: ./ocr
+    ports:
+      - "8500:8500"
+    environment:
+      - OCR_API_KEY=${OCR_API_KEY}
+    restart: unless-stopped
+
 volumes:
   chroma-data:

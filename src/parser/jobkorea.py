@@ -1,6 +1,7 @@
 """잡코리아 HTML 파서 — 목록 / 상세 메타(__next_f) / iframe JD 텍스트 추출."""
 import re
 from dataclasses import dataclass
+from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 
@@ -82,8 +83,49 @@ def parse_job_iframe(html: str) -> str | None:
     if not text:
         return None
 
-    cleaned = _remove_noise_sections(text)
+    cleaned = remove_noise_sections(text)
     return cleaned or None
+
+
+_IFRAME_BASE_URL = "https://www.jobkorea.co.kr/Recruit/GI_Read_Comt_Ifrm"
+
+# 로고·아이콘 등 JD 본문과 무관한 작은 이미지를 걸러내는 최소 크기 (px).
+_MIN_IMAGE_DIMENSION = 50
+
+
+def extract_iframe_image_urls(html: str) -> list[str]:
+    """iframe HTML 에서 JD 본문 이미지 URL 을 추출.
+
+    data: URI, 너무 작은 이미지(로고·아이콘)는 제외한다.
+    상대 경로는 잡코리아 iframe base URL 기준으로 절대 경로로 변환한다.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    urls: list[str] = []
+
+    for img in soup.find_all("img"):
+        src = img.get("src", "")
+        if not src or src.startswith("data:"):
+            continue
+
+        if _is_small_image(img):
+            continue
+
+        absolute_url = urljoin(_IFRAME_BASE_URL, src)
+        urls.append(absolute_url)
+
+    return urls
+
+
+def _is_small_image(img) -> bool:
+    """width 또는 height 속성이 명시되어 있고 _MIN_IMAGE_DIMENSION 미만이면 True."""
+    for attr in ("width", "height"):
+        val = img.get(attr, "")
+        try:
+            if int(val) < _MIN_IMAGE_DIMENSION:
+                return True
+        except (ValueError, TypeError):
+            continue
+    return False
 
 
 # ── 내부 헬퍼 ──
@@ -112,7 +154,7 @@ _NOISE_SECTION_HEADERS: frozenset[str] = frozenset({
 })
 
 
-def _remove_noise_sections(text: str) -> str:
+def remove_noise_sections(text: str) -> str:
     """기업소개·복리후생·전형절차 등 노이즈 섹션을 제거.
 
     1) JD 본문 시작 키워드(모집분야/담당업무 등)를 찾아 그 앞의 상단 노이즈를 제거한다.

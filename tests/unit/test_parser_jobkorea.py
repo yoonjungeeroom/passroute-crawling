@@ -1,8 +1,9 @@
-"""parser.jobkorea 단위 테스트 — tech_stack 필터링 및 raw_text 노이즈 제거."""
+"""parser.jobkorea 단위 테스트 — tech_stack 필터링, raw_text 노이즈 제거, 이미지 URL 추출."""
 from parser.jobkorea import (
     _extract_tech_stack,
     _is_non_tech_skill,
-    _remove_noise_sections,
+    remove_noise_sections,
+    extract_iframe_image_urls,
     parse_job_iframe,
 )
 
@@ -91,7 +92,7 @@ class TestRemoveNoiseSections:
             "4대 보험\n"
             "명절선물\n"
         )
-        result = _remove_noise_sections(text)
+        result = remove_noise_sections(text)
         assert "백엔드 서버 개발" in result
         assert "Python 3년 이상" in result
         assert "복리후생" not in result
@@ -105,7 +106,7 @@ class TestRemoveNoiseSections:
             "서류전형\n"
             "면접\n"
         )
-        result = _remove_noise_sections(text)
+        result = remove_noise_sections(text)
         assert "서비스 개발" in result
         assert "전형절차" not in result
         assert "서류전형" not in result
@@ -117,18 +118,18 @@ class TestRemoveNoiseSections:
             "접수기간 및 방법\n"
             "채용 시 마감\n"
         )
-        result = _remove_noise_sections(text)
+        result = remove_noise_sections(text)
         assert "AWS 경험" in result
         assert "접수기간" not in result
 
     def test_no_noise_returns_original(self):
         text = "담당업무\n서비스 개발\n자격요건\nPython"
-        result = _remove_noise_sections(text)
+        result = remove_noise_sections(text)
         assert result == text
 
     def test_empty_after_noise_removal(self):
         text = "복리후생\n4대 보험"
-        result = _remove_noise_sections(text)
+        result = remove_noise_sections(text)
         assert result == ""
 
     def test_first_noise_header_wins(self):
@@ -140,7 +141,7 @@ class TestRemoveNoiseSections:
             "전형절차\n"
             "면접\n"
         )
-        result = _remove_noise_sections(text)
+        result = remove_noise_sections(text)
         assert "개발" in result
         assert "복리후생" not in result
         assert "전형절차" not in result
@@ -155,7 +156,7 @@ class TestRemoveNoiseSections:
             "자격요건\n"
             "Python 3년\n"
         )
-        result = _remove_noise_sections(text)
+        result = remove_noise_sections(text)
         assert "기업 개요" not in result
         assert "업력 9년차" not in result
         assert "모집분야" in result
@@ -174,7 +175,7 @@ class TestRemoveNoiseSections:
             "전형절차\n"
             "면접\n"
         )
-        result = _remove_noise_sections(text)
+        result = remove_noise_sections(text)
         assert "회사명" not in result
         assert "설립일" not in result
         assert "담당업무" in result
@@ -189,7 +190,7 @@ class TestRemoveNoiseSections:
             "복리후생\n"
             "4대 보험\n"
         )
-        result = _remove_noise_sections(text)
+        result = remove_noise_sections(text)
         assert "백엔드 개발자 모집" in result
         assert "Python 경험 필수" in result
         assert "복리후생" not in result
@@ -221,3 +222,52 @@ class TestParseJobIframe:
         html = "<html><body></body></html>"
         result = parse_job_iframe(html)
         assert result is None
+
+
+class TestExtractIframeImageUrls:
+    """iframe 이미지 URL 추출."""
+
+    def test_extracts_absolute_urls(self):
+        html = '<html><body><img src="https://cdn.jobkorea.co.kr/jd/1.png"></body></html>'
+        result = extract_iframe_image_urls(html)
+        assert result == ["https://cdn.jobkorea.co.kr/jd/1.png"]
+
+    def test_converts_relative_urls(self):
+        html = '<html><body><img src="/images/jd.png"></body></html>'
+        result = extract_iframe_image_urls(html)
+        assert result == ["https://www.jobkorea.co.kr/images/jd.png"]
+
+    def test_skips_data_uri(self):
+        html = '<html><body><img src="data:image/png;base64,abc"></body></html>'
+        result = extract_iframe_image_urls(html)
+        assert result == []
+
+    def test_skips_small_images(self):
+        html = '<html><body><img src="https://cdn.jobkorea.co.kr/logo.png" width="30" height="30"></body></html>'
+        result = extract_iframe_image_urls(html)
+        assert result == []
+
+    def test_keeps_large_images(self):
+        html = '<html><body><img src="https://cdn.jobkorea.co.kr/jd.png" width="800" height="600"></body></html>'
+        result = extract_iframe_image_urls(html)
+        assert len(result) == 1
+
+    def test_keeps_images_without_dimensions(self):
+        html = '<html><body><img src="https://cdn.jobkorea.co.kr/jd.png"></body></html>'
+        result = extract_iframe_image_urls(html)
+        assert len(result) == 1
+
+    def test_skips_empty_src(self):
+        html = '<html><body><img src=""><img></body></html>'
+        result = extract_iframe_image_urls(html)
+        assert result == []
+
+    def test_multiple_images(self):
+        html = (
+            '<html><body>'
+            '<img src="https://cdn.jobkorea.co.kr/1.png">'
+            '<img src="https://cdn.jobkorea.co.kr/2.png">'
+            '</body></html>'
+        )
+        result = extract_iframe_image_urls(html)
+        assert len(result) == 2

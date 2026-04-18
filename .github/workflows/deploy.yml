@@ -49,4 +49,6 @@ jobs:
             --resolve-image-repos \
             --parameter-overrides \
               S3BucketName=${{ secrets.S3_BUCKET_NAME }} \
-              DiscordWebhookUrl=${{ secrets.DISCORD_WEBHOOK_URL }}
+              DiscordWebhookUrl=${{ secrets.DISCORD_WEBHOOK_URL }} \
+              OcrServerUrl=${{ secrets.OCR_SERVER_URL }} \
+              OcrApiKey=${{ secrets.OCR_API_KEY }}

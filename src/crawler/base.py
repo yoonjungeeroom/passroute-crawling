@@ -35,6 +35,21 @@ class JobDetail:
     career_level: str = ""
 
 
+@dataclass(frozen=True)
+class ImageJobDetail:
+    """이미지 JD. OCR 처리 후 JobDetail 로 변환 필요."""
+    source: str
+    external_id: str
+    url: str
+    company_name: str
+    title: str
+    images_b64: tuple[str, ...]
+    tech_stack: tuple[str, ...]
+    deadline: str
+    crawled_at: str
+    career_level: str = ""
+
+
 DEFAULT_DELAY_MIN = 1.0
 DEFAULT_DELAY_MAX = 2.5
 DEFAULT_MAX_PAGES = 500
@@ -63,7 +78,7 @@ class JobCrawler(ABC):
     def fetch_listings_page(self, page: int) -> list[JobListingRef]: ...
 
     @abstractmethod
-    def fetch_detail(self, ref: JobListingRef) -> JobDetail | None: ...
+    def fetch_detail(self, ref: JobListingRef) -> JobDetail | ImageJobDetail | None: ...
 
     def collect_listings(self) -> list[JobListingRef]:
         """전체 목록 페이지를 순회해 공고를 모은다. stale 감지로 조기 종료."""
