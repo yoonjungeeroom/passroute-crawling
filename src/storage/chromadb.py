@@ -37,6 +37,10 @@ class OnnxEmbeddingFunction:
         self._input_names = {inp.name for inp in self.session.get_inputs()}
         logger.info("ONNX 임베딩 로드 완료: %s", model_path)
 
+    @staticmethod
+    def name() -> str:
+        return "onnx_kr_sbert"
+
     def __call__(self, input: list[str]) -> list[list[float]]:
         np = self._np
         results = []
