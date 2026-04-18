@@ -9,9 +9,11 @@ from datetime import datetime, timedelta, timezone
 
 import boto3
 
-from crawler.base import JobDetail, JobListingRef
+from crawler.base import ImageJobDetail, JobDetail, JobListingRef
 from crawler.registry import get_crawler, iter_sources
 from embedding import build_document, embed_text
+from ocr_client import call_ocr
+from parser.jobkorea import _remove_noise_sections
 from storage.s3 import S3Storage
 
 logger = logging.getLogger(__name__)
@@ -99,6 +101,8 @@ def _dispatch_new_listings(
 def job_detail_crawler(event, context):
     """SQS 트리거. 공고 1건 상세 크롤링 → S3 저장."""
     storage = _make_storage()
+    ocr_server_url = os.environ.get("OCR_SERVER_URL", "")
+    ocr_api_key = os.environ.get("OCR_API_KEY", "")
 
     for record in event["Records"]:
         message = json.loads(record["body"])
@@ -114,10 +118,17 @@ def job_detail_crawler(event, context):
         logger.info("상세 크롤링: source=%s id=%s (%s)", ref.source, ref.external_id, ref.company_name)
 
         try:
-            detail: JobDetail | None = crawler.fetch_detail(ref)
-            if detail is None:
-                logger.info("텍스트 JD 없음, 스킵: id=%s", ref.external_id)
+            result = crawler.fetch_detail(ref)
+            if result is None:
+                logger.info("텍스트·이미지 모두 없음, 스킵: id=%s", ref.external_id)
                 continue
+
+            if isinstance(result, ImageJobDetail):
+                detail = _process_image_jd(result, ocr_server_url, ocr_api_key)
+                if detail is None:
+                    continue
+            else:
+                detail = result
 
             document = build_document(detail.raw_text, detail.tech_stack)
             embedding = embed_text(document)
@@ -127,3 +138,36 @@ def job_detail_crawler(event, context):
             raise
 
     return {"statusCode": 200}
+
+
+def _process_image_jd(
+    image_detail: ImageJobDetail, ocr_server_url: str, ocr_api_key: str = "",
+) -> JobDetail | None:
+    """이미지 JD 를 OCR 처리하여 JobDetail 로 변환."""
+    if not ocr_server_url:
+        logger.info("OCR_SERVER_URL 미설정, 이미지 JD 스킵: id=%s", image_detail.external_id)
+        return None
+
+    raw_text = call_ocr(list(image_detail.images_b64), ocr_server_url, ocr_api_key)
+    if not raw_text.strip():
+        logger.info("OCR 결과 비어있음, 스킵: id=%s", image_detail.external_id)
+        return None
+
+    cleaned = _remove_noise_sections(raw_text)
+    if not cleaned:
+        logger.info("OCR 노이즈 제거 후 텍스트 없음, 스킵: id=%s", image_detail.external_id)
+        return None
+
+    logger.info("OCR 완료: id=%s, %d자", image_detail.external_id, len(cleaned))
+    return JobDetail(
+        source=image_detail.source,
+        external_id=image_detail.external_id,
+        url=image_detail.url,
+        company_name=image_detail.company_name,
+        title=image_detail.title,
+        raw_text=cleaned,
+        tech_stack=image_detail.tech_stack,
+        deadline=image_detail.deadline,
+        crawled_at=image_detail.crawled_at,
+        career_level=image_detail.career_level,
+    )
