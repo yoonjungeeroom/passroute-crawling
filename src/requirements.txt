@@ -2,4 +2,4 @@ requests
 beautifulsoup4
 onnxruntime
 transformers
-numpy
+numpy<2
