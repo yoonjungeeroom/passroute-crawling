@@ -57,7 +57,8 @@ def process_parsed_files(s3, bucket: str, storage: ChromaDBStorage) -> int:
                     crawled_at=data["crawled_at"],
                 )
 
-                storage.save(detail)
+                embedding = data.get("embedding")
+                storage.save(detail, embedding=embedding)
                 s3.delete_object(Bucket=bucket, Key=key)
                 saved += 1
             except Exception:

@@ -1,5 +1,2 @@
 chromadb-client
 boto3
-onnxruntime
-transformers
-numpy

@@ -103,15 +103,14 @@ Resources:
       AlarmActions:
         - !Ref DLQAlarmTopic
 
-  # ── Lambda 2: 상세 크롤러 ──
+  # ── Lambda 2: 상세 크롤러 + 임베딩 (컨테이너 이미지) ──
   JobDetailCrawler:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: passroute-job-detail-crawler
-      CodeUri: src/
-      Handler: app.job_detail_crawler
-      Timeout: 60
-      MemorySize: 256
+      PackageType: Image
+      Timeout: 120
+      MemorySize: 512
       Policies:
         - S3CrudPolicy:
             BucketName: !Ref CrawlerDataBucket
@@ -121,6 +120,10 @@ Resources:
           Properties:
             Queue: !GetAtt JobDetailQueue.Arn
             BatchSize: 1
+    Metadata:
+      DockerTag: python3.11
+      DockerContext: .
+      Dockerfile: src/Dockerfile
 
 Outputs:
   JobListCollectorArn:

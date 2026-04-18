@@ -187,10 +187,13 @@ def test_job_list_collector_fails_fast_when_queue_url_missing(
 # ─────────────────────────────────────────────────────────
 
 
+@patch("app.embed_text", return_value=[0.1] * 768)
 @patch("app.S3Storage")
 @patch("app.get_crawler")
-def test_job_detail_crawler_saves_fetched_detail(mock_get_crawler, mock_storage_cls):
-    """상세 크롤링 성공 시 storage.save 가 호출되어야 한다."""
+def test_job_detail_crawler_saves_fetched_detail(
+    mock_get_crawler, mock_storage_cls, mock_embed,
+):
+    """상세 크롤링 성공 시 storage.save 가 임베딩과 함께 호출되어야 한다."""
     mock_storage = MagicMock()
     mock_storage_cls.return_value = mock_storage
 
@@ -210,6 +213,7 @@ def test_job_detail_crawler_saves_fetched_detail(mock_get_crawler, mock_storage_
     mock_storage.save.assert_called_once()
     saved = mock_storage.save.call_args.args[0]
     assert isinstance(saved, JobDetail)
+    assert mock_storage.save.call_args.kwargs["embedding"] == [0.1] * 768
 
 
 @patch("app.S3Storage")
