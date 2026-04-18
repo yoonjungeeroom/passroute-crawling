@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import time
+from datetime import datetime
 
 import boto3
 from botocore.exceptions import ClientError
@@ -82,7 +83,11 @@ def process_delete_requests(s3, bucket: str, storage: ChromaDBStorage) -> int:
             try:
                 resp = s3.get_object(Bucket=bucket, Key=key)
                 data = json.loads(resp["Body"].read().decode("utf-8"))
-                count = storage.delete_expired(data["now_iso"])
+                now_ts = data.get("now_ts")
+                if now_ts is None:
+                    now_iso = data.get("now_iso", "")
+                    now_ts = int(datetime.fromisoformat(now_iso).timestamp())
+                count = storage.delete_expired(now_ts)
                 deleted += count
                 s3.delete_object(Bucket=bucket, Key=key)
                 logger.info("삭제 요청 처리 완료: %s (%d건 삭제)", key, count)
@@ -117,6 +122,7 @@ def main():
     s3 = _build_s3()
 
     logger.info("consumer 시작: bucket=%s, poll_interval=%ds", bucket, POLL_INTERVAL)
+    storage.migrate_deadline_to_ts()
 
     while True:
         try:

@@ -55,9 +55,11 @@ class S3Storage:
 
     def delete_expired(self, now_iso: str) -> int:
         """마감 삭제 요청을 S3 에 기록. 실제 삭제는 EC2 consumer 가 처리."""
+        now_dt = datetime.fromisoformat(now_iso)
+        now_ts = int(now_dt.timestamp())
         timestamp = datetime.now(KST).strftime("%Y%m%dT%H%M%S")
         key = f"delete-requests/{timestamp}.json"
-        body = json.dumps({"now_iso": now_iso, "requested_at": timestamp})
+        body = json.dumps({"now_ts": now_ts, "requested_at": timestamp})
 
         self.s3.put_object(Bucket=self.bucket, Key=key, Body=body.encode("utf-8"))
         logger.info("삭제 요청 저장: %s", key)

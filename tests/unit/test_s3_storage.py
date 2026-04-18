@@ -92,4 +92,6 @@ def test_delete_expired_writes_request_and_returns_zero(mock_boto_client):
     assert call_kwargs["Key"].endswith(".json")
 
     body = json.loads(call_kwargs["Body"])
-    assert body["now_iso"] == "2026-04-12T18:00:00+09:00"
+    from datetime import datetime
+    expected_ts = int(datetime.fromisoformat("2026-04-12T18:00:00+09:00").timestamp())
+    assert body["now_ts"] == expected_ts

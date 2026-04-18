@@ -1,6 +1,7 @@
 """ChromaDB HTTP 클라이언트. 사전 계산된 임베딩으로 JD 를 저장하고 URL 기준 중복 제거."""
 import logging
 from collections.abc import Iterable
+from datetime import datetime, timezone
 
 import chromadb
 
@@ -41,7 +42,7 @@ class ChromaDBStorage:
                 "company_name": detail.company_name,
                 "title": detail.title,
                 "url": detail.url,
-                "deadline": detail.deadline,
+                "deadline": _deadline_to_ts(detail.deadline),
                 "crawled_at": detail.crawled_at,
                 "tech_stack": _tech_stack_to_str(detail.tech_stack),
                 "career_level": detail.career_level,
@@ -53,10 +54,10 @@ class ChromaDBStorage:
         self.collection.upsert(**upsert_kwargs)
         logger.info("저장 완료: %s - %s", detail.company_name, detail.title)
 
-    def delete_expired(self, now_iso: str) -> int:
-        """마감일이 지난 공고 삭제. 상시채용(deadline="")은 제외."""
+    def delete_expired(self, now_ts: int) -> int:
+        """마감일이 지난 공고 삭제. 상시채용(deadline=0)은 제외."""
         results = self.collection.get(
-            where={"$and": [{"deadline": {"$lt": now_iso}}, {"deadline": {"$ne": ""}}]}
+            where={"$and": [{"deadline": {"$lt": now_ts}}, {"deadline": {"$gt": 0}}]}
         )
         expired_ids = results.get("ids") or []
         if not expired_ids:
@@ -64,6 +65,33 @@ class ChromaDBStorage:
         self.collection.delete(ids=expired_ids)
         logger.info("마감 공고 %d건 삭제", len(expired_ids))
         return len(expired_ids)
+
+    def migrate_deadline_to_ts(self) -> int:
+        """기존 문자열 deadline 을 Unix timestamp 로 마이그레이션한다."""
+        migrated = 0
+        offset = 0
+
+        while True:
+            results = self.collection.get(include=["metadatas"], limit=_URL_FETCH_CHUNK, offset=offset)
+            ids = results.get("ids") or []
+            metadatas = results.get("metadatas") or []
+            if not ids:
+                break
+
+            for doc_id, meta in zip(ids, metadatas):
+                deadline = meta.get("deadline")
+                if isinstance(deadline, str):
+                    meta["deadline"] = _deadline_to_ts(deadline)
+                    self.collection.update(ids=[doc_id], metadatas=[meta])
+                    migrated += 1
+
+            if len(ids) < _URL_FETCH_CHUNK:
+                break
+            offset += _URL_FETCH_CHUNK
+
+        if migrated > 0:
+            logger.info("deadline 마이그레이션 완료: %d건", migrated)
+        return migrated
 
     def get_all_urls(self) -> set[str]:
         """저장된 모든 공고 URL 을 청크 단위로 조회."""
@@ -87,3 +115,16 @@ class ChromaDBStorage:
 
 def _tech_stack_to_str(tech_stack: Iterable[str]) -> str:
     return ", ".join(tech_stack)
+
+
+def _deadline_to_ts(deadline: str) -> int:
+    """ISO8601 마감일 문자열을 Unix timestamp(초)로 변환. 빈 문자열(상시채용)은 0."""
+    if not deadline:
+        return 0
+    try:
+        dt = datetime.fromisoformat(deadline)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return int(dt.timestamp())
+    except ValueError:
+        return 0
