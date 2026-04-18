@@ -55,7 +55,6 @@ Resources:
   JobListCollector:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: passroute-job-list-collector
       Runtime: python3.11
       CodeUri: src/
       Handler: app.job_list_collector
@@ -107,7 +106,6 @@ Resources:
   JobDetailCrawler:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: passroute-job-detail-crawler
       PackageType: Image
       Timeout: 120
       MemorySize: 512
