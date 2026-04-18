@@ -1,8 +1,9 @@
-"""parser.jobkorea 단위 테스트 — tech_stack 필터링 및 raw_text 노이즈 제거."""
+"""parser.jobkorea 단위 테스트 — tech_stack 필터링, raw_text 노이즈 제거, 이미지 URL 추출."""
 from parser.jobkorea import (
     _extract_tech_stack,
     _is_non_tech_skill,
     _remove_noise_sections,
+    extract_iframe_image_urls,
     parse_job_iframe,
 )
 
@@ -221,3 +222,52 @@ class TestParseJobIframe:
         html = "<html><body></body></html>"
         result = parse_job_iframe(html)
         assert result is None
+
+
+class TestExtractIframeImageUrls:
+    """iframe 이미지 URL 추출."""
+
+    def test_extracts_absolute_urls(self):
+        html = '<html><body><img src="https://cdn.jobkorea.co.kr/jd/1.png"></body></html>'
+        result = extract_iframe_image_urls(html)
+        assert result == ["https://cdn.jobkorea.co.kr/jd/1.png"]
+
+    def test_converts_relative_urls(self):
+        html = '<html><body><img src="/images/jd.png"></body></html>'
+        result = extract_iframe_image_urls(html)
+        assert result == ["https://www.jobkorea.co.kr/images/jd.png"]
+
+    def test_skips_data_uri(self):
+        html = '<html><body><img src="data:image/png;base64,abc"></body></html>'
+        result = extract_iframe_image_urls(html)
+        assert result == []
+
+    def test_skips_small_images(self):
+        html = '<html><body><img src="https://cdn.jobkorea.co.kr/logo.png" width="30" height="30"></body></html>'
+        result = extract_iframe_image_urls(html)
+        assert result == []
+
+    def test_keeps_large_images(self):
+        html = '<html><body><img src="https://cdn.jobkorea.co.kr/jd.png" width="800" height="600"></body></html>'
+        result = extract_iframe_image_urls(html)
+        assert len(result) == 1
+
+    def test_keeps_images_without_dimensions(self):
+        html = '<html><body><img src="https://cdn.jobkorea.co.kr/jd.png"></body></html>'
+        result = extract_iframe_image_urls(html)
+        assert len(result) == 1
+
+    def test_skips_empty_src(self):
+        html = '<html><body><img src=""><img></body></html>'
+        result = extract_iframe_image_urls(html)
+        assert result == []
+
+    def test_multiple_images(self):
+        html = (
+            '<html><body>'
+            '<img src="https://cdn.jobkorea.co.kr/1.png">'
+            '<img src="https://cdn.jobkorea.co.kr/2.png">'
+            '</body></html>'
+        )
+        result = extract_iframe_image_urls(html)
+        assert len(result) == 2
