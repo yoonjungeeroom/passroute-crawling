@@ -129,7 +129,7 @@ Resources:
     Properties:
       PackageType: Image
       Timeout: 120
-      MemorySize: 512
+      MemorySize: 1024
       Policies:
         - S3CrudPolicy:
             BucketName: !Ref CrawlerDataBucket
