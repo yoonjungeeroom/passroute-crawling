@@ -1,4 +1,5 @@
 """잡코리아 크롤러. 동작 파라미터는 JOBKOREA_* 환경변수로 오버라이드 가능."""
+import base64
 import logging
 import os
 import random
@@ -12,11 +13,17 @@ from crawler.base import (
     DEFAULT_DELAY_MIN,
     DEFAULT_MAX_PAGES,
     DEFAULT_STALE_PAGE_THRESHOLD,
+    ImageJobDetail,
     JobCrawler,
     JobDetail,
     JobListingRef,
 )
-from parser.jobkorea import parse_job_detail, parse_job_iframe, parse_job_list
+from parser.jobkorea import (
+    extract_iframe_image_urls,
+    parse_job_detail,
+    parse_job_iframe,
+    parse_job_list,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +140,7 @@ class JobKoreaCrawler(JobCrawler):
             for item in parse_job_list(resp.text)
         ]
 
-    def fetch_detail(self, ref: JobListingRef) -> JobDetail | None:
+    def fetch_detail(self, ref: JobListingRef) -> JobDetail | ImageJobDetail | None:
         # 상세 페이지 → 메타데이터 (회사명, 제목, 마감일, 기술스택)
         detail_resp = self.session.get(ref.url, timeout=15)
         detail_resp.raise_for_status()
@@ -146,22 +153,56 @@ class JobKoreaCrawler(JobCrawler):
         iframe_resp.raise_for_status()
         raw_text = parse_job_iframe(iframe_resp.text)
 
-        if raw_text is None:
-            logger.info("external_id=%s: 이미지 JD, 스킵", ref.external_id)
+        if raw_text is not None:
+            return JobDetail(
+                source=self.source,
+                external_id=ref.external_id,
+                url=ref.url,
+                company_name=metadata.company_name or ref.company_name,
+                title=metadata.title or ref.title,
+                raw_text=raw_text,
+                tech_stack=metadata.tech_stack,
+                deadline=metadata.deadline,
+                crawled_at=datetime.now(KST).isoformat(),
+                career_level=ref.career_level,
+            )
+
+        # 이미지 JD: 이미지 다운로드 → ImageJobDetail 반환
+        image_urls = extract_iframe_image_urls(iframe_resp.text)
+        if not image_urls:
+            logger.info("external_id=%s: 텍스트·이미지 모두 없음, 스킵", ref.external_id)
             return None
 
-        return JobDetail(
+        images_b64 = self._download_images(image_urls)
+        if not images_b64:
+            logger.info("external_id=%s: 이미지 다운로드 실패, 스킵", ref.external_id)
+            return None
+
+        logger.info("external_id=%s: 이미지 JD %d장 추출", ref.external_id, len(images_b64))
+        return ImageJobDetail(
             source=self.source,
             external_id=ref.external_id,
             url=ref.url,
             company_name=metadata.company_name or ref.company_name,
             title=metadata.title or ref.title,
-            raw_text=raw_text,
+            images_b64=tuple(images_b64),
             tech_stack=metadata.tech_stack,
             deadline=metadata.deadline,
             crawled_at=datetime.now(KST).isoformat(),
             career_level=ref.career_level,
         )
+
+    def _download_images(self, urls: list[str]) -> list[str]:
+        """이미지 URL 목록을 다운로드하여 base64 인코딩된 리스트로 반환."""
+        results: list[str] = []
+        for url in urls:
+            try:
+                resp = self.session.get(url, timeout=15)
+                resp.raise_for_status()
+                results.append(base64.b64encode(resp.content).decode("ascii"))
+            except Exception:
+                logger.warning("이미지 다운로드 실패: %s", url, exc_info=True)
+        return results
 
 
 _T = TypeVar("_T")
