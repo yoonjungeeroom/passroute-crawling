@@ -48,4 +48,5 @@ jobs:
             --resolve-s3 \
             --resolve-image-repos \
             --parameter-overrides \
-              S3BucketName=${{ secrets.S3_BUCKET_NAME }}
+              S3BucketName=${{ secrets.S3_BUCKET_NAME }} \
+              DiscordWebhookUrl=${{ secrets.DISCORD_WEBHOOK_URL }}

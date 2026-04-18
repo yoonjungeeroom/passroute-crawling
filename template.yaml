@@ -8,6 +8,11 @@ Parameters:
     Type: String
     Description: 크롤링 데이터 중간 저장 S3 버킷명
     Default: passroute-crawler-data-0607
+  DiscordWebhookUrl:
+    Type: String
+    Description: DLQ 알람 Discord 웹훅 URL
+    NoEcho: true
+    Default: ''
 
 Globals:
   Function:
@@ -75,13 +80,29 @@ Resources:
             Schedule: cron(0 18 * * ? *)
             Enabled: false
 
-  # ── DLQ 알람 ──
-  # SNS 토픽만 생성해두고 구독(이메일/슬랙)은 콘솔에서 수동 추가.
+  # ── DLQ 알람 → Discord 알림 ──
   DLQAlarmTopic:
     Type: AWS::SNS::Topic
     Properties:
       TopicName: passroute-dlq-alarm
       DisplayName: passroute DLQ Alarm
+
+  DLQDiscordNotifier:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: python3.11
+      CodeUri: src/
+      Handler: notify.discord_notifier
+      Timeout: 30
+      MemorySize: 128
+      Environment:
+        Variables:
+          DISCORD_WEBHOOK_URL: !Ref DiscordWebhookUrl
+      Events:
+        SNSTrigger:
+          Type: SNS
+          Properties:
+            Topic: !Ref DLQAlarmTopic
 
   JobDetailDLQAlarm:
     Type: AWS::CloudWatch::Alarm
@@ -137,5 +158,5 @@ Outputs:
     Description: 크롤링 데이터 S3 버킷명
     Value: !Ref CrawlerDataBucket
   DLQAlarmTopicArn:
-    Description: DLQ 알람 SNS 토픽 ARN (구독은 콘솔에서 수동 추가)
+    Description: DLQ 알람 SNS 토픽 ARN
     Value: !Ref DLQAlarmTopic
