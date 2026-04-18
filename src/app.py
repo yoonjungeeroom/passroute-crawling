@@ -13,7 +13,7 @@ from crawler.base import ImageJobDetail, JobDetail, JobListingRef
 from crawler.registry import get_crawler, iter_sources
 from embedding import build_document, embed_text
 from ocr_client import call_ocr
-from parser.jobkorea import _remove_noise_sections
+from parser.jobkorea import remove_noise_sections
 from storage.s3 import S3Storage
 
 logger = logging.getLogger(__name__)
@@ -153,7 +153,7 @@ def _process_image_jd(
         logger.info("OCR 결과 비어있음, 스킵: id=%s", image_detail.external_id)
         return None
 
-    cleaned = _remove_noise_sections(raw_text)
+    cleaned = remove_noise_sections(raw_text)
     if not cleaned:
         logger.info("OCR 노이즈 제거 후 텍스트 없음, 스킵: id=%s", image_detail.external_id)
         return None

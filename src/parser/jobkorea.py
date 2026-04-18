@@ -83,7 +83,7 @@ def parse_job_iframe(html: str) -> str | None:
     if not text:
         return None
 
-    cleaned = _remove_noise_sections(text)
+    cleaned = remove_noise_sections(text)
     return cleaned or None
 
 
@@ -154,7 +154,7 @@ _NOISE_SECTION_HEADERS: frozenset[str] = frozenset({
 })
 
 
-def _remove_noise_sections(text: str) -> str:
+def remove_noise_sections(text: str) -> str:
     """기업소개·복리후생·전형절차 등 노이즈 섹션을 제거.
 
     1) JD 본문 시작 키워드(모집분야/담당업무 등)를 찾아 그 앞의 상단 노이즈를 제거한다.
