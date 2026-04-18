@@ -44,6 +44,7 @@ class ChromaDBStorage:
                 "deadline": detail.deadline,
                 "crawled_at": detail.crawled_at,
                 "tech_stack": _tech_stack_to_str(detail.tech_stack),
+                "career_level": detail.career_level,
             }],
         }
         if embedding is not None:

@@ -36,7 +36,7 @@ def main() -> int:
     refs = crawler.fetch_listings_page(page)
     print(f"총 {len(refs)}건")
     for ref in refs[:10]:
-        print(f"  - [{ref.external_id}] {ref.company_name} | {ref.title}")
+        print(f"  - [{ref.external_id}] {ref.company_name} | {ref.title} [{ref.career_level}]")
         print(f"    {ref.url}")
 
     if not refs:
