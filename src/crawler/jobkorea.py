@@ -24,6 +24,7 @@ KST = timezone(timedelta(hours=9))
 
 BASE_URL = "https://www.jobkorea.co.kr"
 LIST_URL = f"{BASE_URL}/recruit/joblist"
+GI_LIST_URL = f"{LIST_URL}/_GI_List/"
 DETAIL_URL = f"{BASE_URL}/Recruit/GI_Read"
 IFRAME_URL = f"{BASE_URL}/Recruit/GI_Read_Comt_Ifrm"
 
@@ -105,6 +106,7 @@ class JobKoreaCrawler(JobCrawler):
         self.session = requests.Session()
         headers = dict(BASE_HEADERS)
         headers["User-Agent"] = random.choice(USER_AGENTS)
+        headers["X-Requested-With"] = "XMLHttpRequest"
         self.session.headers.update(headers)
 
     @classmethod
@@ -112,14 +114,20 @@ class JobKoreaCrawler(JobCrawler):
         return f"{DETAIL_URL}/{external_id}"
 
     def fetch_listings_page(self, page: int) -> list[JobListingRef]:
-        params = {
-            "menucode": "duty",
-            "dutyCtgr": DUTY_GROUP_CODE,
-            "duty": ",".join(self.category_codes),
-            "orderTab": "3",  # 최신업데이트순
-            "Page": page,
+        data = {
+            "isDefault": "false",
+            "condition[duty]": ",".join(self.category_codes),
+            "condition[menucode]": "duty",
+            "page": page,
+            "direct": "0",
+            "order": "3",  # 최신업데이트순
+            "pagesize": "40",
+            "tabindex": "0",
+            "onePick": "0",
+            "confirm": "0",
+            "profile": "0",
         }
-        resp = self.session.get(LIST_URL, params=params, timeout=15)
+        resp = self.session.post(GI_LIST_URL, data=data, timeout=15)
         resp.raise_for_status()
         return [
             JobListingRef(
