@@ -11,9 +11,6 @@ import boto3
 
 from crawler.base import ImageJobDetail, JobDetail, JobListingRef
 from crawler.registry import get_crawler, iter_sources
-from embedding import build_document, embed_text
-from ocr_client import call_ocr
-from parser.jobkorea import remove_noise_sections
 from storage.s3 import S3Storage
 
 logger = logging.getLogger(__name__)
@@ -100,6 +97,8 @@ def _dispatch_new_listings(
 
 def job_detail_crawler(event, context):
     """SQS 트리거. 공고 1건 상세 크롤링 → S3 저장."""
+    from embedding import build_document, embed_text  # noqa: C0415
+
     storage = _make_storage()
 
     for record in event["Records"]:
@@ -140,6 +139,9 @@ def job_detail_crawler(event, context):
 
 def _process_image_jd(image_detail: ImageJobDetail) -> JobDetail | None:
     """이미지 JD 를 로컬 ONNX OCR 로 처리하여 JobDetail 로 변환."""
+    from ocr_client import call_ocr  # noqa: C0415
+    from parser.jobkorea import remove_noise_sections  # noqa: C0415
+
     raw_text = call_ocr(list(image_detail.images_b64))
     if not raw_text.strip():
         logger.info("OCR 결과 비어있음, 스킵: id=%s", image_detail.external_id)
