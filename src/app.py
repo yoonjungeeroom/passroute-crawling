@@ -101,8 +101,6 @@ def _dispatch_new_listings(
 def job_detail_crawler(event, context):
     """SQS 트리거. 공고 1건 상세 크롤링 → S3 저장."""
     storage = _make_storage()
-    ocr_server_url = os.environ.get("OCR_SERVER_URL", "")
-    ocr_api_key = os.environ.get("OCR_API_KEY", "")
 
     for record in event["Records"]:
         message = json.loads(record["body"])
@@ -124,7 +122,7 @@ def job_detail_crawler(event, context):
                 continue
 
             if isinstance(result, ImageJobDetail):
-                detail = _process_image_jd(result, ocr_server_url, ocr_api_key)
+                detail = _process_image_jd(result)
                 if detail is None:
                     continue
             else:
@@ -140,15 +138,9 @@ def job_detail_crawler(event, context):
     return {"statusCode": 200}
 
 
-def _process_image_jd(
-    image_detail: ImageJobDetail, ocr_server_url: str, ocr_api_key: str = "",
-) -> JobDetail | None:
-    """이미지 JD 를 OCR 처리하여 JobDetail 로 변환."""
-    if not ocr_server_url:
-        logger.info("OCR_SERVER_URL 미설정, 이미지 JD 스킵: id=%s", image_detail.external_id)
-        return None
-
-    raw_text = call_ocr(list(image_detail.images_b64), ocr_server_url, ocr_api_key)
+def _process_image_jd(image_detail: ImageJobDetail) -> JobDetail | None:
+    """이미지 JD 를 로컬 ONNX OCR 로 처리하여 JobDetail 로 변환."""
+    raw_text = call_ocr(list(image_detail.images_b64))
     if not raw_text.strip():
         logger.info("OCR 결과 비어있음, 스킵: id=%s", image_detail.external_id)
         return None
