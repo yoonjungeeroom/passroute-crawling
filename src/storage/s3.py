@@ -53,8 +53,12 @@ class S3Storage:
         self.s3.put_object(Bucket=self.bucket, Key=key, Body=body.encode("utf-8"))
         logger.info("S3 저장 완료: %s", key)
 
-    def delete_expired(self, now_iso: str) -> int:
-        """마감 삭제 요청을 S3 에 기록. 실제 삭제는 EC2 consumer 가 처리."""
+    def delete_expired(self, now_iso: str) -> bool:
+        """마감 삭제 요청을 S3 에 기록. 실제 삭제는 EC2 consumer 가 처리.
+
+        Returns:
+            S3 저장 성공 여부.
+        """
         now_dt = datetime.fromisoformat(now_iso)
         now_ts = int(now_dt.timestamp())
         timestamp = datetime.now(KST).strftime("%Y%m%dT%H%M%S")
@@ -63,4 +67,4 @@ class S3Storage:
 
         self.s3.put_object(Bucket=self.bucket, Key=key, Body=body.encode("utf-8"))
         logger.info("삭제 요청 저장: %s", key)
-        return 0
+        return True

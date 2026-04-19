@@ -42,7 +42,7 @@ def job_list_collector(event, context):
     storage = _make_storage()
     queue_url = _required_env("JOB_DETAIL_QUEUE_URL")
 
-    deleted = storage.delete_expired(datetime.now(KST).isoformat())
+    delete_requested = storage.delete_expired(datetime.now(KST).isoformat())
     existing_urls = storage.get_all_urls()
 
     total_new = 0
@@ -58,7 +58,7 @@ def job_list_collector(event, context):
 
     return {
         "statusCode": 200,
-        "body": json.dumps({"new": total_new, "deleted": deleted}),
+        "body": json.dumps({"new": total_new, "delete_requested": delete_requested}),
     }
 
 

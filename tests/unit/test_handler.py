@@ -75,7 +75,7 @@ def test_job_list_collector_dispatches_only_new_jobs(
     mock_boto_client.return_value = mock_sqs
 
     mock_storage = MagicMock()
-    mock_storage.delete_expired.return_value = 0
+    mock_storage.delete_expired.return_value = True
     mock_storage.get_all_urls.return_value = {
         "https://www.jobkorea.co.kr/Recruit/GI_Read/111",
         "https://www.jobkorea.co.kr/Recruit/GI_Read/222",
@@ -107,7 +107,7 @@ def test_job_list_collector_deletes_expired_before_dispatch(
     """목록 수집 전에 마감 공고 삭제가 한 번 호출되어야 한다."""
     mock_boto_client.return_value = MagicMock()
     mock_storage = MagicMock()
-    mock_storage.delete_expired.return_value = 0
+    mock_storage.delete_expired.return_value = True
     mock_storage.get_all_urls.return_value = set()
     mock_storage_cls.return_value = mock_storage
     mock_crawler = MagicMock()
@@ -130,7 +130,7 @@ def test_job_list_collector_sends_nothing_when_all_existing(
     mock_boto_client.return_value = mock_sqs
 
     mock_storage = MagicMock()
-    mock_storage.delete_expired.return_value = 0
+    mock_storage.delete_expired.return_value = True
     mock_storage.get_all_urls.return_value = {
         "https://www.jobkorea.co.kr/Recruit/GI_Read/111",
     }
@@ -154,7 +154,7 @@ def test_job_list_collector_returns_counts_in_body(
     """응답 body 에 신규 전송 건수와 삭제 건수가 포함되어야 한다."""
     mock_boto_client.return_value = MagicMock()
     mock_storage = MagicMock()
-    mock_storage.delete_expired.return_value = 0
+    mock_storage.delete_expired.return_value = True
     mock_storage.get_all_urls.return_value = set()
     mock_storage_cls.return_value = mock_storage
     mock_crawler = MagicMock()
@@ -165,7 +165,7 @@ def test_job_list_collector_returns_counts_in_body(
 
     assert result["statusCode"] == 200
     body = json.loads(result["body"])
-    assert body == {"new": 1, "deleted": 0}
+    assert body == {"new": 1, "delete_requested": True}
 
 
 @patch("app.boto3.client")

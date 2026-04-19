@@ -78,15 +78,15 @@ def test_save_puts_correct_key_and_body(mock_boto_client):
 
 
 @patch("storage.s3.boto3.client")
-def test_delete_expired_writes_request_and_returns_zero(mock_boto_client):
-    """delete_expired 가 삭제 요청 파일을 S3 에 저장하고 0 을 반환한다."""
+def test_delete_expired_writes_request_and_returns_true(mock_boto_client):
+    """delete_expired 가 삭제 요청 파일을 S3 에 저장하고 True 를 반환한다."""
     mock_s3 = MagicMock()
     mock_boto_client.return_value = mock_s3
 
     storage = S3Storage(bucket="test-bucket")
     result = storage.delete_expired("2026-04-12T18:00:00+09:00")
 
-    assert result == 0
+    assert result is True
     call_kwargs = mock_s3.put_object.call_args.kwargs
     assert call_kwargs["Key"].startswith("delete-requests/")
     assert call_kwargs["Key"].endswith(".json")
