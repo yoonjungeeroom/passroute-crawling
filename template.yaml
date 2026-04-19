@@ -13,15 +13,6 @@ Parameters:
     Description: DLQ 알람 Discord 웹훅 URL
     NoEcho: true
     Default: ''
-  OcrServerUrl:
-    Type: String
-    Description: OCR 서버 URL (이미지 JD 처리용, 미설정 시 이미지 JD 스킵)
-    Default: ''
-  OcrApiKey:
-    Type: String
-    Description: OCR 서버 API 키 (X-API-Key 인증)
-    NoEcho: true
-    Default: ''
 
 Globals:
   Function:
@@ -138,11 +129,7 @@ Resources:
     Properties:
       PackageType: Image
       Timeout: 120
-      MemorySize: 1024
-      Environment:
-        Variables:
-          OCR_SERVER_URL: !Ref OcrServerUrl
-          OCR_API_KEY: !Ref OcrApiKey
+      MemorySize: 1536
       Policies:
         - S3CrudPolicy:
             BucketName: !Ref CrawlerDataBucket

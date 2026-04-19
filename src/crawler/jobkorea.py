@@ -193,16 +193,22 @@ class JobKoreaCrawler(JobCrawler):
         )
 
     def _download_images(self, urls: list[str]) -> list[str]:
-        """이미지 URL 목록을 다운로드하여 base64 인코딩된 리스트로 반환."""
-        results: list[str] = []
-        for url in urls:
+        """이미지 URL 목록을 병렬 다운로드하여 base64 인코딩된 리스트로 반환."""
+        from concurrent.futures import ThreadPoolExecutor
+
+        def _fetch(url: str) -> str | None:
             try:
                 resp = self.session.get(url, timeout=15)
                 resp.raise_for_status()
-                results.append(base64.b64encode(resp.content).decode("ascii"))
+                return base64.b64encode(resp.content).decode("ascii")
             except Exception:
                 logger.warning("이미지 다운로드 실패: %s", url, exc_info=True)
-        return results
+                return None
+
+        with ThreadPoolExecutor(max_workers=min(len(urls), 5)) as pool:
+            fetched = pool.map(_fetch, urls)
+
+        return [img for img in fetched if img is not None]
 
 
 _T = TypeVar("_T")

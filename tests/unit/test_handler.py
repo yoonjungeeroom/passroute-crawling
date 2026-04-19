@@ -75,7 +75,7 @@ def test_job_list_collector_dispatches_only_new_jobs(
     mock_boto_client.return_value = mock_sqs
 
     mock_storage = MagicMock()
-    mock_storage.delete_expired.return_value = 0
+    mock_storage.delete_expired.return_value = True
     mock_storage.get_all_urls.return_value = {
         "https://www.jobkorea.co.kr/Recruit/GI_Read/111",
         "https://www.jobkorea.co.kr/Recruit/GI_Read/222",
@@ -107,7 +107,7 @@ def test_job_list_collector_deletes_expired_before_dispatch(
     """목록 수집 전에 마감 공고 삭제가 한 번 호출되어야 한다."""
     mock_boto_client.return_value = MagicMock()
     mock_storage = MagicMock()
-    mock_storage.delete_expired.return_value = 0
+    mock_storage.delete_expired.return_value = True
     mock_storage.get_all_urls.return_value = set()
     mock_storage_cls.return_value = mock_storage
     mock_crawler = MagicMock()
@@ -130,7 +130,7 @@ def test_job_list_collector_sends_nothing_when_all_existing(
     mock_boto_client.return_value = mock_sqs
 
     mock_storage = MagicMock()
-    mock_storage.delete_expired.return_value = 0
+    mock_storage.delete_expired.return_value = True
     mock_storage.get_all_urls.return_value = {
         "https://www.jobkorea.co.kr/Recruit/GI_Read/111",
     }
@@ -154,7 +154,7 @@ def test_job_list_collector_returns_counts_in_body(
     """응답 body 에 신규 전송 건수와 삭제 건수가 포함되어야 한다."""
     mock_boto_client.return_value = MagicMock()
     mock_storage = MagicMock()
-    mock_storage.delete_expired.return_value = 0
+    mock_storage.delete_expired.return_value = True
     mock_storage.get_all_urls.return_value = set()
     mock_storage_cls.return_value = mock_storage
     mock_crawler = MagicMock()
@@ -165,7 +165,7 @@ def test_job_list_collector_returns_counts_in_body(
 
     assert result["statusCode"] == 200
     body = json.loads(result["body"])
-    assert body == {"new": 1, "deleted": 0}
+    assert body == {"new": 1, "delete_requested": True}
 
 
 @patch("app.boto3.client")
@@ -289,11 +289,9 @@ def _image_detail(**overrides) -> ImageJobDetail:
 @patch("app.S3Storage")
 @patch("app.get_crawler")
 def test_image_jd_ocr_saves_detail(
-    mock_get_crawler, mock_storage_cls, mock_ocr, mock_embed, monkeypatch,
+    mock_get_crawler, mock_storage_cls, mock_ocr, mock_embed,
 ):
     """이미지 JD 가 OCR 처리되어 JobDetail 로 저장된다."""
-    monkeypatch.setenv("OCR_SERVER_URL", "http://ocr:8500")
-    monkeypatch.setenv("OCR_API_KEY", "test-key")
     mock_storage = MagicMock()
     mock_storage_cls.return_value = mock_storage
 
@@ -311,42 +309,10 @@ def test_image_jd_ocr_saves_detail(
     app.job_detail_crawler(event, None)
 
     mock_ocr.assert_called_once()
-    _, kwargs = mock_ocr.call_args
-    # 없으면 positional 으로 확인
-    call_args = mock_ocr.call_args
-    assert call_args[0][2] == "test-key"  # api_key 전달 검증
     mock_storage.save.assert_called_once()
     saved = mock_storage.save.call_args.args[0]
     assert isinstance(saved, JobDetail)
     assert "프론트엔드 개발" in saved.raw_text
-
-
-@patch("app.call_ocr")
-@patch("app.S3Storage")
-@patch("app.get_crawler")
-def test_image_jd_skipped_when_no_ocr_url(
-    mock_get_crawler, mock_storage_cls, mock_ocr, monkeypatch,
-):
-    """OCR_SERVER_URL 이 미설정이면 이미지 JD 를 스킵한다."""
-    monkeypatch.delenv("OCR_SERVER_URL", raising=False)
-    mock_storage = MagicMock()
-    mock_storage_cls.return_value = mock_storage
-
-    mock_crawler = MagicMock()
-    mock_crawler.fetch_detail.return_value = _image_detail()
-    mock_get_crawler.return_value = mock_crawler
-
-    event = _make_sqs_event({
-        "source": "jobkorea",
-        "external_id": "888",
-        "url": "https://www.jobkorea.co.kr/Recruit/GI_Read/888",
-        "company_name": "이미지기업",
-        "title": "프론트엔드 채용",
-    })
-    app.job_detail_crawler(event, None)
-
-    mock_ocr.assert_not_called()
-    mock_storage.save.assert_not_called()
 
 
 @patch("app.embed_text", return_value=[0.1] * 768)
@@ -354,10 +320,9 @@ def test_image_jd_skipped_when_no_ocr_url(
 @patch("app.S3Storage")
 @patch("app.get_crawler")
 def test_image_jd_skipped_when_ocr_empty(
-    mock_get_crawler, mock_storage_cls, mock_ocr, mock_embed, monkeypatch,
+    mock_get_crawler, mock_storage_cls, mock_ocr, mock_embed,
 ):
     """OCR 결과가 비어있으면 저장하지 않고 스킵한다."""
-    monkeypatch.setenv("OCR_SERVER_URL", "http://ocr:8500")
     mock_storage = MagicMock()
     mock_storage_cls.return_value = mock_storage
 
