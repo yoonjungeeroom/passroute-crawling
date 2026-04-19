@@ -56,15 +56,20 @@ class ChromaDBStorage:
 
     def delete_expired(self, now_ts: int) -> int:
         """마감일이 지난 공고 삭제. 상시채용(deadline=0)은 제외."""
-        results = self.collection.get(
-            where={"$and": [{"deadline": {"$lt": now_ts}}, {"deadline": {"$gt": 0}}]}
-        )
-        expired_ids = results.get("ids") or []
-        if not expired_ids:
-            return 0
-        self.collection.delete(ids=expired_ids)
-        logger.info("마감 공고 %d건 삭제", len(expired_ids))
-        return len(expired_ids)
+        deleted = 0
+        where = {"$and": [{"deadline": {"$lt": now_ts}}, {"deadline": {"$gt": 0}}]}
+
+        while True:
+            results = self.collection.get(where=where, limit=_URL_FETCH_CHUNK)
+            expired_ids = results.get("ids") or []
+            if not expired_ids:
+                break
+            self.collection.delete(ids=expired_ids)
+            deleted += len(expired_ids)
+
+        if deleted > 0:
+            logger.info("마감 공고 %d건 삭제", deleted)
+        return deleted
 
     def migrate_deadline_to_ts(self) -> int:
         """기존 문자열 deadline 을 Unix timestamp 로 마이그레이션한다."""
@@ -78,12 +83,18 @@ class ChromaDBStorage:
             if not ids:
                 break
 
+            batch_ids: list[str] = []
+            batch_metas: list[dict] = []
             for doc_id, meta in zip(ids, metadatas):
                 deadline = meta.get("deadline")
                 if isinstance(deadline, str):
                     meta["deadline"] = _deadline_to_ts(deadline)
-                    self.collection.update(ids=[doc_id], metadatas=[meta])
-                    migrated += 1
+                    batch_ids.append(doc_id)
+                    batch_metas.append(meta)
+
+            if batch_ids:
+                self.collection.update(ids=batch_ids, metadatas=batch_metas)
+                migrated += len(batch_ids)
 
             if len(ids) < _URL_FETCH_CHUNK:
                 break
