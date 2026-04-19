@@ -25,7 +25,7 @@ t.save_pretrained('/tmp/tokenizer/')"
 # Stage 2: PaddleOCR 한국어 모델 → ONNX 변환
 FROM python:3.11-slim AS ocr-builder
 
-RUN apt-get update && apt-get install -y --no-install-recommends wget \
+RUN apt-get update && apt-get install -y --no-install-recommends wget libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir paddlepaddle==2.6.2 paddle2onnx packaging
