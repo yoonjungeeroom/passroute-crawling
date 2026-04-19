@@ -28,7 +28,7 @@ FROM python:3.11-slim AS ocr-builder
 RUN apt-get update && apt-get install -y --no-install-recommends wget libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir paddlepaddle==2.6.2 paddle2onnx packaging
+RUN pip install --no-cache-dir paddlepaddle==2.6.2 "paddle2onnx>=1.2,<2.0" packaging
 
 # 한국어 PP-OCRv3 rec 모델 다운로드 및 변환
 RUN wget -q https://paddleocr.bj.bcebos.com/PP-OCRv3/multilingual/korean_PP-OCRv3_rec_infer.tar \
