@@ -61,7 +61,7 @@ COPY --from=ocr-builder /tmp/ocr_models/korean_rec.onnx /app/ocr_models/korean_r
 COPY --from=ocr-builder /tmp/ocr_models/korean_dict.txt /app/ocr_models/korean_dict.txt
 
 # 의존성 설치
-COPY src/requirements.txt ${LAMBDA_TASK_ROOT}/
+COPY src/requirements-full.txt ${LAMBDA_TASK_ROOT}/requirements.txt
 RUN pip install --no-cache-dir -r ${LAMBDA_TASK_ROOT}/requirements.txt
 
 # 소스 코드 복사

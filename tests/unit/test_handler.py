@@ -187,7 +187,7 @@ def test_job_list_collector_fails_fast_when_queue_url_missing(
 # ─────────────────────────────────────────────────────────
 
 
-@patch("app.embed_text", return_value=[0.1] * 768)
+@patch("embedding.embed_text", return_value=[0.1] * 768)
 @patch("app.S3Storage")
 @patch("app.get_crawler")
 def test_job_detail_crawler_saves_fetched_detail(
@@ -284,8 +284,8 @@ def _image_detail(**overrides) -> ImageJobDetail:
     return ImageJobDetail(**base)
 
 
-@patch("app.embed_text", return_value=[0.1] * 768)
-@patch("app.call_ocr", return_value="담당업무\n프론트엔드 개발\n자격요건\nReact 경험")
+@patch("embedding.embed_text", return_value=[0.1] * 768)
+@patch("ocr_client.call_ocr", return_value="담당업무\n프론트엔드 개발\n자격요건\nReact 경험")
 @patch("app.S3Storage")
 @patch("app.get_crawler")
 def test_image_jd_ocr_saves_detail(
@@ -315,8 +315,8 @@ def test_image_jd_ocr_saves_detail(
     assert "프론트엔드 개발" in saved.raw_text
 
 
-@patch("app.embed_text", return_value=[0.1] * 768)
-@patch("app.call_ocr", return_value="")
+@patch("embedding.embed_text", return_value=[0.1] * 768)
+@patch("ocr_client.call_ocr", return_value="")
 @patch("app.S3Storage")
 @patch("app.get_crawler")
 def test_image_jd_skipped_when_ocr_empty(
