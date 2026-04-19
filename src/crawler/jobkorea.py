@@ -7,6 +7,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable, ClassVar, TypeVar
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from crawler.base import (
     DEFAULT_DELAY_MAX,
@@ -103,6 +105,12 @@ class JobKoreaCrawler(JobCrawler):
             "JOBKOREA_CATEGORY_CODES", category_codes, _DEFAULT_CATEGORY_CODES,
         )
         self.session = requests.Session()
+        retry = Retry(
+            total=3,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+        )
+        self.session.mount("https://", HTTPAdapter(max_retries=retry))
         headers = dict(BASE_HEADERS)
         headers["User-Agent"] = random.choice(USER_AGENTS)
         headers["X-Requested-With"] = "XMLHttpRequest"

@@ -60,6 +60,9 @@ COPY --from=embedding-builder /tmp/tokenizer/ /app/models/tokenizer/
 COPY --from=ocr-builder /tmp/ocr_models/korean_rec.onnx /app/ocr_models/korean_rec.onnx
 COPY --from=ocr-builder /tmp/ocr_models/korean_dict.txt /app/ocr_models/korean_dict.txt
 
+# OpenCV 런타임 의존성 (rapidocr-onnxruntime → cv2 → libGL)
+RUN yum install -y mesa-libGL && yum clean all
+
 # 의존성 설치
 COPY src/requirements-full.txt ${LAMBDA_TASK_ROOT}/requirements.txt
 RUN pip install --no-cache-dir -r ${LAMBDA_TASK_ROOT}/requirements.txt
