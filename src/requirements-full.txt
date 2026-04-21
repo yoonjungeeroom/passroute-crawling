@@ -3,5 +3,4 @@ beautifulsoup4
 onnxruntime
 transformers
 numpy<2
-rapidocr-onnxruntime
-Pillow
+google-auth
