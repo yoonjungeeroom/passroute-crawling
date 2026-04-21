@@ -61,6 +61,14 @@ def call_ocr(images_b64: list[str]) -> str:
 
     texts: list[str] = []
     for i, annotation in enumerate(resp.json().get("responses", [])):
+        error = annotation.get("error")
+        if error:
+            logger.warning(
+                "OCR 이미지 %d/%d 실패: code=%s %s",
+                i + 1, len(images_b64), error.get("code"), error.get("message"),
+            )
+            continue
+
         full_text = annotation.get("fullTextAnnotation", {}).get("text", "")
         texts.append(full_text)
         logger.info(

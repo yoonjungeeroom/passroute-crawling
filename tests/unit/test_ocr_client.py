@@ -120,3 +120,23 @@ def test_batch_request_sends_all_images(mock_post, mock_creds):
     body = call_kwargs.kwargs.get("json") or call_kwargs[1].get("json")
     assert len(body["requests"]) == 3
     mock_post.assert_called_once()
+
+
+@patch("ocr_client._get_credentials")
+@patch("ocr_client.requests.post")
+def test_image_error_logged_and_skipped(mock_post, mock_creds):
+    """개별 이미지 에러가 로깅되고 결과에서 제외된다."""
+    mock_creds.return_value = MagicMock(token="fake-token")
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {
+        "responses": [
+            {"error": {"code": 3, "message": "Bad image data"}},
+            {"fullTextAnnotation": {"text": "정상 텍스트"}},
+        ],
+    }
+    mock_resp.raise_for_status = MagicMock()
+    mock_post.return_value = mock_resp
+
+    result = ocr_client.call_ocr(["bad_img", "good_img"])
+
+    assert result == "정상 텍스트"
