@@ -13,6 +13,11 @@ Parameters:
     Description: DLQ 알람 Discord 웹훅 URL
     NoEcho: true
     Default: ''
+  GcpSaKeyB64:
+    Type: String
+    Description: GCP 서비스 계정 JSON 키 (base64 인코딩)
+    NoEcho: true
+    Default: ''
 
 Globals:
   Function:
@@ -130,6 +135,9 @@ Resources:
       PackageType: Image
       Timeout: 120
       MemorySize: 1536
+      Environment:
+        Variables:
+          GCP_SA_KEY_B64: !Ref GcpSaKeyB64
       Policies:
         - S3CrudPolicy:
             BucketName: !Ref CrawlerDataBucket
