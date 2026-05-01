@@ -1,6 +1,7 @@
 """passroute-crawler Lambda 핸들러.
 
 EventBridge cron → [job_list_collector] → SQS → [job_detail_crawler] → S3 → EC2 consumer → ChromaDB
+EventBridge cron → [news_collector] → S3 → EC2 consumer → ChromaDB
 """
 import json
 import logging
@@ -9,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 
 import boto3
 
+from collector.naver_news import NaverNewsCollector, news_item_to_detail_dict
 from crawler.base import ImageJobDetail, JobDetail, JobListingRef
 from crawler.registry import get_crawler, iter_sources
 from storage.s3 import S3Storage
@@ -135,6 +137,53 @@ def job_detail_crawler(event, context):
             raise
 
     return {"statusCode": 200}
+
+
+# ── Lambda 3: 뉴스 수집 (cron) ──
+
+
+def news_collector(event, context):
+    """주요 기업의 기술/사업 동향 뉴스를 수집하여 S3 에 저장."""
+    from embedding import build_document, embed_text  # noqa: C0415
+
+    client_id = _required_env("NAVER_CLIENT_ID")
+    client_secret = _required_env("NAVER_CLIENT_SECRET")
+    storage = _make_storage()
+
+    existing_urls = storage.get_all_urls()
+
+    collector = NaverNewsCollector(client_id=client_id, client_secret=client_secret)
+    items = collector.collect_all()
+
+    saved = 0
+    skipped = 0
+    for item in items:
+        if item.url in existing_urls:
+            skipped += 1
+            continue
+
+        data = news_item_to_detail_dict(item)
+
+        try:
+            document = build_document(data["raw_text"], tuple(data["tech_stack"]))
+            embedding = embed_text(document)
+            data["embedding"] = embedding
+        except Exception:
+            logger.exception("임베딩 실패, 임베딩 없이 저장: id=%s", data["external_id"])
+
+        key = f"parsed/{data['source']}/{data['external_id']}.json"
+        storage.s3.put_object(
+            Bucket=storage.bucket,
+            Key=key,
+            Body=json.dumps(data, ensure_ascii=False).encode("utf-8"),
+        )
+        saved += 1
+
+    logger.info("뉴스 수집 완료: 저장 %d건, 중복 스킵 %d건", saved, skipped)
+    return {
+        "statusCode": 200,
+        "body": json.dumps({"saved": saved, "skipped": skipped}),
+    }
 
 
 def _process_image_jd(image_detail: ImageJobDetail) -> JobDetail | None:
