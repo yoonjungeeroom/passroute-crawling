@@ -50,4 +50,6 @@ jobs:
             --parameter-overrides \
               S3BucketName=${{ secrets.S3_BUCKET_NAME }} \
               DiscordWebhookUrl=${{ secrets.DISCORD_WEBHOOK_URL }} \
-              GcpSaKeyB64=${{ secrets.GCP_SA_KEY_B64 }}
+              GcpSaKeyB64=${{ secrets.GCP_SA_KEY_B64 }} \
+              NaverClientId=${{ secrets.NAVER_CLIENT_ID }} \
+              NaverClientSecret=${{ secrets.NAVER_CLIENT_SECRET }}
