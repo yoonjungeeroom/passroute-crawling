@@ -187,7 +187,7 @@ def news_collector(event, context):
     }
 
 
-# ── Lambda 4: 기��� 블로그 수집 (cron) ──
+# ── Lambda 4: 기술 블로그 수집 (cron) ──
 
 
 def blog_collector(event, context):

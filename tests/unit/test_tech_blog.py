@@ -3,8 +3,6 @@ import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from collector.tech_blog import (
     BLOG_RETENTION_DAYS,
     BlogArticle,
