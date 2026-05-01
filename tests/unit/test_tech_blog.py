@@ -3,13 +3,19 @@ import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from collector.tech_blog import (
     BLOG_RETENTION_DAYS,
     BlogArticle,
     BlogFeed,
     TechBlogCollector,
+    _classify_job_categories,
     _deadline_from_pub_date,
+    _fetch_page_content,
+    _is_truncated,
     _make_external_id,
+    _parse_devocean_date,
     _strip_html,
     blog_article_to_detail_dict,
 )
@@ -43,6 +49,29 @@ class TestMakeExternalId:
 
     def test_different_urls_differ(self):
         assert _make_external_id("https://a.com") != _make_external_id("https://b.com")
+
+
+class TestClassifyJobCategories:
+    def test_backend_keywords(self):
+        cats = _classify_job_categories("Spring Boot 기반 MSA 전환기")
+        assert "백엔드개발자" in cats
+
+    def test_frontend_keywords(self):
+        cats = _classify_job_categories("React 컴포넌트 디자인 시스템 구축")
+        assert "프론트엔드개발자" in cats
+
+    def test_ai_ml_keywords(self):
+        cats = _classify_job_categories("LLM 기반 RAG 파이프라인 구축")
+        assert "AI/ML엔지니어" in cats
+
+    def test_multiple_categories(self):
+        cats = _classify_job_categories("Kubernetes 위에서 ML 모델 서빙하기")
+        assert "클라우드엔지니어" in cats
+        assert "MLOps엔지니어" in cats
+
+    def test_no_match(self):
+        cats = _classify_job_categories("회사 워크숍 후기")
+        assert cats == []
 
 
 class TestDeadlineFromPubDate:
@@ -82,7 +111,7 @@ class TestBlogArticleToDetailDict:
 
     def test_raw_text_title_only_when_no_summary(self):
         data = blog_article_to_detail_dict(_article(summary=""))
-        assert data["raw_text"] == "Kafka 파티션 전략"
+        assert data["raw_text"].startswith("Kafka 파티션 전략")
 
     def test_deadline_is_unix_timestamp(self):
         data = blog_article_to_detail_dict(_article())
@@ -96,6 +125,17 @@ class TestBlogArticleToDetailDict:
     def test_career_level_empty(self):
         data = blog_article_to_detail_dict(_article())
         assert data["career_level"] == ""
+
+    def test_raw_text_includes_job_categories(self):
+        data = blog_article_to_detail_dict(_article())
+        assert "[직무]" in data["raw_text"]
+        assert "데이터엔지니어" in data["raw_text"]
+
+    def test_no_job_section_when_no_match(self):
+        data = blog_article_to_detail_dict(_article(
+            title="회사 워크숍 후기", summary="즐거운 시간이었습니다.",
+        ))
+        assert "[직무]" not in data["raw_text"]
 
 
 # ─────────────────────────────────────────────────────────
@@ -120,10 +160,37 @@ def _feed_entry(title="테스트 글", url="https://blog.test/1", summary="요�
     }
 
 
+class TestIsTruncated:
+    def test_ellipsis_unicode(self):
+        assert _is_truncated("안녕하세요 카카오…") is True
+
+    def test_ellipsis_dots(self):
+        assert _is_truncated("내용이 잘려서...") is True
+
+    def test_complete_sentence(self):
+        assert _is_truncated("이 글에서는 기술을 소개합니다.") is False
+
+    def test_empty_string(self):
+        assert _is_truncated("") is False
+
+
+class TestParseDevoceanDate:
+    def test_valid_date(self):
+        dt = _parse_devocean_date("26.04.30")
+        assert dt.year == 2026
+        assert dt.month == 4
+        assert dt.day == 30
+
+    def test_invalid_date_returns_now(self):
+        dt = _parse_devocean_date("invalid")
+        assert dt.year >= 2026
+
+
 class TestTechBlogCollector:
+    @patch("collector.tech_blog.TechBlogCollector._fetch_devocean", return_value=[])
     @patch("collector.tech_blog.feedparser.parse")
     @patch("collector.tech_blog.time.sleep")
-    def test_collect_all_deduplicates_by_url(self, mock_sleep, mock_parse):
+    def test_collect_all_deduplicates_by_url(self, mock_sleep, mock_parse, mock_devocean):
         """동일 URL 이 여러 피드에 있어도 1건만 수집."""
         same_url = "https://blog.test/shared"
         mock_parse.return_value = _mock_feed_result([
@@ -140,9 +207,10 @@ class TestTechBlogCollector:
         assert len(articles) == 1
         assert articles[0].url == same_url
 
+    @patch("collector.tech_blog.TechBlogCollector._fetch_devocean", return_value=[])
     @patch("collector.tech_blog.feedparser.parse")
     @patch("collector.tech_blog.time.sleep")
-    def test_collect_all_skips_entries_without_link(self, mock_sleep, mock_parse):
+    def test_collect_all_skips_entries_without_link(self, mock_sleep, mock_parse, mock_devocean):
         """link 가 없는 항목은 스킵."""
         mock_parse.return_value = _mock_feed_result([
             {"title": "제목만", "summary": "요약"},
@@ -155,13 +223,34 @@ class TestTechBlogCollector:
 
         assert len(articles) == 1
 
+    @patch("collector.tech_blog._fetch_page_content", return_value="본문 내용입니다.")
+    @patch("collector.tech_blog.TechBlogCollector._fetch_devocean", return_value=[])
     @patch("collector.tech_blog.feedparser.parse")
     @patch("collector.tech_blog.time.sleep")
-    def test_collect_all_skips_entries_without_summary(self, mock_sleep, mock_parse):
-        """요약이 없는 항목은 스킵."""
+    def test_truncated_summary_fetches_page_content(self, mock_sleep, mock_parse, mock_devocean, mock_fetch):
+        """잘린 요약은 페이지 본문을 가져와서 대체한다."""
         mock_parse.return_value = _mock_feed_result([
-            _feed_entry(title="요약 없음", url="https://blog.test/no-summary", summary=""),
-            _feed_entry(title="정상 글", url="https://blog.test/ok", summary="요약 있음"),
+            _feed_entry(title="잘린 글", url="https://blog.test/truncated", summary="안녕하세요…"),
+            _feed_entry(title="정상 글", url="https://blog.test/ok", summary="완결된 요약입니다."),
+        ])
+
+        feeds = (BlogFeed("테스트", "https://test.com/feed"),)
+        collector = TechBlogCollector(feeds=feeds, request_delay=0)
+        articles = collector.collect_all()
+
+        assert len(articles) == 2
+        assert articles[0].summary == "본문 내용입니다."
+        assert articles[1].summary == "완결된 요약입니다."
+        mock_fetch.assert_called_once_with("https://blog.test/truncated")
+
+    @patch("collector.tech_blog._fetch_page_content", return_value="")
+    @patch("collector.tech_blog.TechBlogCollector._fetch_devocean", return_value=[])
+    @patch("collector.tech_blog.feedparser.parse")
+    @patch("collector.tech_blog.time.sleep")
+    def test_truncated_summary_falls_back_to_empty(self, mock_sleep, mock_parse, mock_devocean, mock_fetch):
+        """페이지 본문 추출도 실패하면 빈 요약으로 저장 (제목만)."""
+        mock_parse.return_value = _mock_feed_result([
+            _feed_entry(title="잘린 글", url="https://blog.test/truncated", summary="안녕하세요…"),
         ])
 
         feeds = (BlogFeed("테스트", "https://test.com/feed"),)
@@ -169,17 +258,137 @@ class TestTechBlogCollector:
         articles = collector.collect_all()
 
         assert len(articles) == 1
-        assert articles[0].title == "정상 글"
+        assert articles[0].summary == ""
 
+    @patch("collector.tech_blog._fetch_page_content", return_value="본문")
+    @patch("collector.tech_blog.TechBlogCollector._fetch_devocean", return_value=[])
     @patch("collector.tech_blog.feedparser.parse")
     @patch("collector.tech_blog.time.sleep")
-    def test_collect_all_handles_feed_error(self, mock_sleep, mock_parse):
+    def test_fetch_content_limited_to_max(self, mock_sleep, mock_parse, mock_devocean, mock_fetch):
+        """본문 추출은 최대 5건까지만 수행."""
+        entries = [
+            _feed_entry(title=f"글{i}", url=f"https://blog.test/{i}", summary="잘림…")
+            for i in range(10)
+        ]
+        mock_parse.return_value = _mock_feed_result(entries)
+
+        feeds = (BlogFeed("테스트", "https://test.com/feed"),)
+        collector = TechBlogCollector(feeds=feeds, request_delay=0)
+        articles = collector.collect_all()
+
+        assert mock_fetch.call_count == 5
+        fetched = [a for a in articles if a.summary == "본문"]
+        not_fetched = [a for a in articles if a.summary == ""]
+        assert len(fetched) == 5
+        assert len(not_fetched) == 5
+
+    @patch("collector.tech_blog.TechBlogCollector._fetch_devocean", return_value=[])
+    @patch("collector.tech_blog.feedparser.parse")
+    @patch("collector.tech_blog.time.sleep")
+    def test_collect_all_handles_feed_error(self, mock_sleep, mock_parse, mock_devocean):
         """피드 파싱 예외 시 해당 피드를 스킵하고 계속 진행."""
         mock_parse.side_effect = Exception("network error")
 
         feeds = (BlogFeed("에러피드", "https://error.com/feed"),)
         collector = TechBlogCollector(feeds=feeds, request_delay=0)
         articles = collector.collect_all()
+
+        assert articles == []
+
+
+# ─────────────────────────────────────────────────────────
+# SK 데보션 크롤링 테스트
+# ─────────────────────────────────────────────────────────
+
+
+_DEVOCEAN_LIST_HTML = """
+<html><body>
+<div>
+  <div data-board-id="100">
+    <strong class="tit">AI 모델 서빙 가이드</strong>
+    <span class="date">26.04.24</span>
+  </div>
+  <div data-board-id="100"><span class="tit">AI 모델 서빙 가이드</span></div>
+  <div data-board-id="200">
+    <strong class="tit">Kafka 최적화 사례</strong>
+    <span class="date">26.03.15</span>
+  </div>
+  <div data-board-id="200"><span class="tit">Kafka 최적화 사례</span></div>
+</div>
+</body></html>
+"""
+
+_DEVOCEAN_DETAIL_HTML = """
+<html><body>
+<div class="sub-view-cont">
+DEVOTEE 요약
+본 블로그는 AI 모델 서빙 파이프라인 구축 경험을 공유합니다.
+CDK와 API Gateway를 활용한 실전 가이드입니다.
+
+이 글은 실제 프로덕션에서 운영을 위해 개발을 진행했던 프로젝트 기반입니다.
+</div>
+</body></html>
+"""
+
+_DEVOCEAN_DETAIL_NO_DEVOTEE = """
+<html><body>
+<div class="sub-view-cont">
+이 글에는 AI 요약 기능이 적용되지 않았습니다. 본문만 있습니다.
+</div>
+</body></html>
+"""
+
+
+class TestDevocean:
+    @patch("collector.tech_blog.requests.get")
+    @patch("collector.tech_blog.time.sleep")
+    def test_fetch_devocean_extracts_devotee_summary(self, mock_sleep, mock_get):
+        """데보션 목록 + 상세에서 DEVOTEE 요약을 추출한다."""
+        list_resp = MagicMock()
+        list_resp.text = _DEVOCEAN_LIST_HTML
+        list_resp.raise_for_status = MagicMock()
+
+        detail_resp = MagicMock()
+        detail_resp.text = _DEVOCEAN_DETAIL_HTML
+        detail_resp.raise_for_status = MagicMock()
+
+        mock_get.side_effect = [list_resp, detail_resp, detail_resp]
+
+        collector = TechBlogCollector(feeds=(), request_delay=0)
+        articles = collector._fetch_devocean()
+
+        assert len(articles) == 2
+        assert articles[0].company_name == "SK"
+        assert articles[0].title == "AI 모델 서빙 가이드"
+        assert "AI 모델 서빙 파이프라인" in articles[0].summary
+
+    @patch("collector.tech_blog.requests.get")
+    @patch("collector.tech_blog.time.sleep")
+    def test_fetch_devocean_skips_without_devotee(self, mock_sleep, mock_get):
+        """DEVOTEE 요약이 없는 글은 스킵한다."""
+        list_resp = MagicMock()
+        list_resp.text = _DEVOCEAN_LIST_HTML
+        list_resp.raise_for_status = MagicMock()
+
+        no_devotee_resp = MagicMock()
+        no_devotee_resp.text = _DEVOCEAN_DETAIL_NO_DEVOTEE
+        no_devotee_resp.raise_for_status = MagicMock()
+
+        mock_get.side_effect = [list_resp, no_devotee_resp, no_devotee_resp]
+
+        collector = TechBlogCollector(feeds=(), request_delay=0)
+        articles = collector._fetch_devocean()
+
+        assert len(articles) == 0
+
+    @patch("collector.tech_blog.requests.get")
+    @patch("collector.tech_blog.time.sleep")
+    def test_fetch_devocean_handles_list_error(self, mock_sleep, mock_get):
+        """목록 페이지 요청 실패 시 빈 리스트 반환."""
+        mock_get.side_effect = Exception("connection error")
+
+        collector = TechBlogCollector(feeds=(), request_delay=0)
+        articles = collector._fetch_devocean()
 
         assert articles == []
 
