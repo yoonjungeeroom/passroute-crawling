@@ -166,6 +166,30 @@ Resources:
       DockerContext: .
       Dockerfile: src/Dockerfile
 
+  # ── Lambda 4: 기술 블로그 수집 (cron) ──
+  BlogCollector:
+    Type: AWS::Serverless::Function
+    Properties:
+      PackageType: Image
+      Timeout: 900
+      MemorySize: 1536
+      ImageConfig:
+        Command:
+          - app.blog_collector
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref CrawlerDataBucket
+      Events:
+        DailySchedule:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 20 * * ? *)
+            Enabled: false
+    Metadata:
+      DockerTag: python3.11
+      DockerContext: .
+      Dockerfile: src/Dockerfile
+
   # ── Lambda 2: 상세 크롤러 + 임베딩 (컨테이너 이미지) ──
   JobDetailCrawler:
     Type: AWS::Serverless::Function
@@ -206,6 +230,9 @@ Outputs:
   NewsCollectorArn:
     Description: 뉴스 수집 Lambda ARN
     Value: !GetAtt NewsCollector.Arn
+  BlogCollectorArn:
+    Description: 블로그 수집 Lambda ARN
+    Value: !GetAtt BlogCollector.Arn
   DLQAlarmTopicArn:
     Description: DLQ 알람 SNS 토픽 ARN
     Value: !Ref DLQAlarmTopic
