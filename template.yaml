@@ -18,6 +18,16 @@ Parameters:
     Description: GCP 서비스 계정 JSON 키 (base64 인코딩)
     NoEcho: true
     Default: ''
+  NaverClientId:
+    Type: String
+    Description: 네이버 개발자 센터 클라이언트 ID
+    NoEcho: true
+    Default: ''
+  NaverClientSecret:
+    Type: String
+    Description: 네이버 개발자 센터 클라이언트 Secret
+    NoEcho: true
+    Default: ''
 
 Globals:
   Function:
@@ -128,6 +138,34 @@ Resources:
       AlarmActions:
         - !Ref DLQAlarmTopic
 
+  # ── Lambda 3: 뉴스 수집 (cron) ──
+  NewsCollector:
+    Type: AWS::Serverless::Function
+    Properties:
+      PackageType: Image
+      Timeout: 900
+      MemorySize: 1536
+      ImageConfig:
+        Command:
+          - app.news_collector
+      Environment:
+        Variables:
+          NAVER_CLIENT_ID: !Ref NaverClientId
+          NAVER_CLIENT_SECRET: !Ref NaverClientSecret
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref CrawlerDataBucket
+      Events:
+        DailySchedule:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 19 * * ? *)
+            Enabled: true
+    Metadata:
+      DockerTag: python3.11
+      DockerContext: .
+      Dockerfile: src/Dockerfile
+
   # ── Lambda 2: 상세 크롤러 + 임베딩 (컨테이너 이미지) ──
   JobDetailCrawler:
     Type: AWS::Serverless::Function
@@ -165,6 +203,9 @@ Outputs:
   CrawlerDataBucketName:
     Description: 크롤링 데이터 S3 버킷명
     Value: !Ref CrawlerDataBucket
+  NewsCollectorArn:
+    Description: 뉴스 수집 Lambda ARN
+    Value: !GetAtt NewsCollector.Arn
   DLQAlarmTopicArn:
     Description: DLQ 알람 SNS 토픽 ARN
     Value: !Ref DLQAlarmTopic
