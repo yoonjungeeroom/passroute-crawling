@@ -237,8 +237,7 @@ def _fetch_page_content(url: str) -> str:
         logger.exception("페이지 요청 실패: %s", url)
         return ""
 
-    if resp.encoding and resp.encoding.lower() != "utf-8":
-        resp.encoding = "utf-8"
+    resp.encoding = resp.apparent_encoding
 
     text = trafilatura.extract(resp.text)
     if text and len(text) > 200 and _has_meaningful_content(text):
