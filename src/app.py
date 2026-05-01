@@ -2,6 +2,7 @@
 
 EventBridge cron → [job_list_collector] → SQS → [job_detail_crawler] → S3 → EC2 consumer → ChromaDB
 EventBridge cron → [news_collector] → S3 → EC2 consumer → ChromaDB
+EventBridge cron → [blog_collector] → S3 → EC2 consumer → ChromaDB
 """
 import json
 import logging
@@ -11,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 import boto3
 
 from collector.naver_news import NaverNewsCollector, news_item_to_detail_dict
+from collector.tech_blog import TechBlogCollector, blog_article_to_detail_dict
 from crawler.base import ImageJobDetail, JobDetail, JobListingRef
 from crawler.registry import get_crawler, iter_sources
 from storage.s3 import S3Storage
@@ -180,6 +182,50 @@ def news_collector(event, context):
         saved += 1
 
     logger.info("뉴스 수집 완료: 저장 %d건, 중복 스킵 %d건", saved, skipped)
+    return {
+        "statusCode": 200,
+        "body": json.dumps({"saved": saved, "skipped": skipped}),
+    }
+
+
+# ── Lambda 4: 기��� 블로그 수집 (cron) ──
+
+
+def blog_collector(event, context):
+    """주요 기업 기술 블로그 RSS 피드를 수집하여 S3 에 저장."""
+    from embedding import build_document, embed_text  # noqa: C0415
+
+    storage = _make_storage()
+    existing_urls = storage.get_all_urls()
+
+    collector = TechBlogCollector()
+    articles = collector.collect_all()
+
+    saved = 0
+    skipped = 0
+    for article in articles:
+        if article.url in existing_urls:
+            skipped += 1
+            continue
+
+        data = blog_article_to_detail_dict(article)
+
+        try:
+            document = build_document(data["raw_text"], tuple(data["tech_stack"]))
+            embedding = embed_text(document)
+            data["embedding"] = embedding
+        except Exception:
+            logger.exception("임베딩 실패, 임베딩 없이 저장: id=%s", data["external_id"])
+
+        key = f"parsed/{data['source']}/{data['external_id']}.json"
+        storage.s3.put_object(
+            Bucket=storage.bucket,
+            Key=key,
+            Body=json.dumps(data, ensure_ascii=False).encode("utf-8"),
+        )
+        saved += 1
+
+    logger.info("블로그 수집 완료: 저장 %d건, 중복 스킵 %d건", saved, skipped)
     return {
         "statusCode": 200,
         "body": json.dumps({"saved": saved, "skipped": skipped}),
