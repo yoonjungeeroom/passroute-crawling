@@ -203,7 +203,12 @@ def _classify_job_categories(text: str) -> list[str]:
     categories: list[str] = []
     for category, keywords in _JOB_CATEGORY_KEYWORDS.items():
         for kw in keywords:
-            if kw.lower() in text_lower:
+            kw_lower = kw.lower()
+            if len(kw_lower) <= 3:
+                if re.search(rf"\b{re.escape(kw_lower)}\b", text_lower):
+                    categories.append(category)
+                    break
+            elif kw_lower in text_lower:
                 categories.append(category)
                 break
     return categories
