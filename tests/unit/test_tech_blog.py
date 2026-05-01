@@ -401,7 +401,7 @@ class TestDevocean:
 class TestBlogCollectorHandler:
     @patch("embedding.embed_text", return_value=[0.1] * 768)
     @patch("app.S3Storage")
-    @patch("app.TechBlogCollector")
+    @patch("collector.tech_blog.TechBlogCollector")
     def test_saves_new_articles(self, mock_collector_cls, mock_storage_cls, mock_embed):
         """신규 블로그 글이 S3 에 저장된다."""
         import app
@@ -423,7 +423,7 @@ class TestBlogCollectorHandler:
 
     @patch("embedding.embed_text", return_value=[0.1] * 768)
     @patch("app.S3Storage")
-    @patch("app.TechBlogCollector")
+    @patch("collector.tech_blog.TechBlogCollector")
     def test_skips_existing_urls(self, mock_collector_cls, mock_storage_cls, mock_embed):
         """이미 저장된 URL 은 스킵한다."""
         import app
@@ -445,7 +445,7 @@ class TestBlogCollectorHandler:
 
     @patch("embedding.embed_text", side_effect=RuntimeError("model error"))
     @patch("app.S3Storage")
-    @patch("app.TechBlogCollector")
+    @patch("collector.tech_blog.TechBlogCollector")
     def test_saves_without_embedding_on_failure(
         self, mock_collector_cls, mock_storage_cls, mock_embed,
     ):

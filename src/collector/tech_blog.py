@@ -15,7 +15,6 @@ from email.utils import parsedate_to_datetime
 
 import feedparser
 import requests
-import trafilatura
 from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
@@ -224,6 +223,8 @@ def _has_meaningful_content(text: str) -> bool:
 
 def _fetch_page_content(url: str) -> str:
     """URL 에서 본문 텍스트를 추출한다. trafilatura → BeautifulSoup 순으로 시도."""
+    import trafilatura  # noqa: C0415
+
     try:
         resp = requests.get(url, headers=_HTTP_HEADERS, timeout=15)
         resp.raise_for_status()

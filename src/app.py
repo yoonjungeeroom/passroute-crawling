@@ -12,7 +12,6 @@ from datetime import datetime, timedelta, timezone
 import boto3
 
 from collector.naver_news import NaverNewsCollector, news_item_to_detail_dict
-from collector.tech_blog import TechBlogCollector, blog_article_to_detail_dict
 from crawler.base import ImageJobDetail, JobDetail, JobListingRef
 from crawler.registry import get_crawler, iter_sources
 from storage.s3 import S3Storage
@@ -193,6 +192,7 @@ def news_collector(event, context):
 
 def blog_collector(event, context):
     """주요 기업 기술 블로그 RSS 피드를 수집하여 S3 에 저장."""
+    from collector.tech_blog import TechBlogCollector, blog_article_to_detail_dict  # noqa: C0415
     from embedding import build_document, embed_text  # noqa: C0415
 
     storage = _make_storage()
