@@ -204,16 +204,12 @@ def blog_collector(event, context):
     collector = TechBlogCollector()
     articles = collector.collect_all()
 
+    new_articles = [a for a in articles if a.url not in existing_urls][:BLOG_BATCH_SIZE]
+    skipped = len(articles) - len(new_articles)
+    del articles
+
     saved = 0
-    skipped = 0
-    for article in articles:
-        if article.url in existing_urls:
-            skipped += 1
-            continue
-
-        if saved >= BLOG_BATCH_SIZE:
-            break
-
+    for article in new_articles:
         data = blog_article_to_detail_dict(article)
 
         try:
