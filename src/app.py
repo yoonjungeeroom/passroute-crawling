@@ -190,11 +190,11 @@ def news_collector(event, context):
 # ── Lambda 4: 기술 블로그 수집 (cron) ──
 
 
-BLOG_BATCH_SIZE = int(os.environ.get("BLOG_BATCH_SIZE", "100"))
-
-
 def blog_collector(event, context):
-    """주요 기업 기술 블로그 RSS 피드를 수집하여 S3 에 저장."""
+    """주요 기업 기술 블로그 RSS 피드를 수집하여 S3 에 저장.
+
+    피드별로 수집 → 임베딩 → 저장을 순차 처리하여 메모리를 절약한다.
+    """
     from collector.tech_blog import TechBlogCollector, blog_article_to_detail_dict  # noqa: C0415
     from embedding import build_document, embed_text  # noqa: C0415
 
@@ -202,14 +202,47 @@ def blog_collector(event, context):
     existing_urls = storage.get_all_urls()
 
     collector = TechBlogCollector()
-    articles = collector.collect_all()
-
-    new_articles = [a for a in articles if a.url not in existing_urls][:BLOG_BATCH_SIZE]
-    skipped = len(articles) - len(new_articles)
-    del articles
 
     saved = 0
-    for article in new_articles:
+    skipped = 0
+
+    for feed in collector.feeds:
+        articles = collector._fetch_feed(feed)
+        logger.info("feed=%s: %d건 수집", feed.company_name, len(articles))
+
+        for article in articles:
+            if article.url in existing_urls:
+                skipped += 1
+                continue
+
+            data = blog_article_to_detail_dict(article)
+
+            try:
+                document = build_document(data["raw_text"], tuple(data["tech_stack"]))
+                embedding = embed_text(document)
+                data["embedding"] = embedding
+            except Exception:
+                logger.exception("임베딩 실패, 임베딩 없이 저장: id=%s", data["external_id"])
+
+            key = f"parsed/{data['source']}/{data['external_id']}.json"
+            storage.s3.put_object(
+                Bucket=storage.bucket,
+                Key=key,
+                Body=json.dumps(data, ensure_ascii=False).encode("utf-8"),
+            )
+            saved += 1
+            existing_urls.add(article.url)
+
+        del articles
+
+    devocean_articles = collector._fetch_devocean()
+    logger.info("feed=SK 데보션: %d건 수집", len(devocean_articles))
+
+    for article in devocean_articles:
+        if article.url in existing_urls:
+            skipped += 1
+            continue
+
         data = blog_article_to_detail_dict(article)
 
         try:
@@ -226,6 +259,9 @@ def blog_collector(event, context):
             Body=json.dumps(data, ensure_ascii=False).encode("utf-8"),
         )
         saved += 1
+        existing_urls.add(article.url)
+
+    del devocean_articles
 
     logger.info("블로그 수집 완료: 저장 %d건, 중복 스킵 %d건", saved, skipped)
     return {
