@@ -408,8 +408,11 @@ class TestBlogCollectorHandler:
         mock_storage.get_all_urls.return_value = set()
         mock_storage_cls.return_value = mock_storage
 
+        mock_feed = MagicMock()
         mock_collector = MagicMock()
-        mock_collector.collect_all.return_value = [_article()]
+        mock_collector.feeds = [mock_feed]
+        mock_collector._fetch_feed.return_value = [_article()]
+        mock_collector._fetch_devocean.return_value = []
         mock_collector_cls.return_value = mock_collector
 
         result = app.blog_collector({}, None)
@@ -430,8 +433,11 @@ class TestBlogCollectorHandler:
         mock_storage.get_all_urls.return_value = {"https://tech.kakao.com/post/123"}
         mock_storage_cls.return_value = mock_storage
 
+        mock_feed = MagicMock()
         mock_collector = MagicMock()
-        mock_collector.collect_all.return_value = [_article()]
+        mock_collector.feeds = [mock_feed]
+        mock_collector._fetch_feed.return_value = [_article()]
+        mock_collector._fetch_devocean.return_value = []
         mock_collector_cls.return_value = mock_collector
 
         result = app.blog_collector({}, None)
@@ -454,8 +460,11 @@ class TestBlogCollectorHandler:
         mock_storage.get_all_urls.return_value = set()
         mock_storage_cls.return_value = mock_storage
 
+        mock_feed = MagicMock()
         mock_collector = MagicMock()
-        mock_collector.collect_all.return_value = [_article()]
+        mock_collector.feeds = [mock_feed]
+        mock_collector._fetch_feed.return_value = [_article()]
+        mock_collector._fetch_devocean.return_value = []
         mock_collector_cls.return_value = mock_collector
 
         result = app.blog_collector({}, None)
