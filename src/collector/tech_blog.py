@@ -292,7 +292,10 @@ class TechBlogCollector:
         now = datetime.now(KST)
 
         try:
-            parsed = feedparser.parse(feed.feed_url)
+            parsed = feedparser.parse(
+                feed.feed_url,
+                agent="Mozilla/5.0 (compatible; passroute-bot/1.0)",
+            )
         except Exception:
             logger.exception("피드 파싱 실패: %s (%s)", feed.company_name, feed.feed_url)
             return []
