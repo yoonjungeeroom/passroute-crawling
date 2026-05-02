@@ -190,6 +190,9 @@ def news_collector(event, context):
 # ── Lambda 4: 기술 블로그 수집 (cron) ──
 
 
+BLOG_BATCH_SIZE = int(os.environ.get("BLOG_BATCH_SIZE", "100"))
+
+
 def blog_collector(event, context):
     """주요 기업 기술 블로그 RSS 피드를 수집하여 S3 에 저장."""
     from collector.tech_blog import TechBlogCollector, blog_article_to_detail_dict  # noqa: C0415
@@ -207,6 +210,9 @@ def blog_collector(event, context):
         if article.url in existing_urls:
             skipped += 1
             continue
+
+        if saved >= BLOG_BATCH_SIZE:
+            break
 
         data = blog_article_to_detail_dict(article)
 
