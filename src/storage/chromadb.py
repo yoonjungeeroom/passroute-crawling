@@ -128,8 +128,10 @@ def _tech_stack_to_str(tech_stack: Iterable[str]) -> str:
     return ", ".join(tech_stack)
 
 
-def _deadline_to_ts(deadline: str) -> int:
-    """ISO8601 마감일 문자열을 Unix timestamp(초)로 변환. 빈 문자열(상시채용)은 0."""
+def _deadline_to_ts(deadline: str | int) -> int:
+    """마감일을 Unix timestamp(초)로 변환. int 는 그대로 반환, 빈 값은 0."""
+    if isinstance(deadline, int):
+        return deadline
     if not deadline:
         return 0
     try:
