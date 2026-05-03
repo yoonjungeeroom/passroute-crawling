@@ -21,9 +21,9 @@ logger = logging.getLogger(__name__)
 
 KST = timezone(timedelta(hours=9))
 
-BLOG_RETENTION_DAYS = 730
+BLOG_RETENTION_DAYS = 365
 _MAX_FETCH_CONTENT = 5
-_FEED_FILTER_DAYS = timedelta(days=730)
+_FEED_FILTER_DAYS = timedelta(days=365)
 
 # ── 블로그 피드 설정 ──
 
