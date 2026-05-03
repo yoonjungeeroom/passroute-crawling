@@ -49,7 +49,10 @@ def discord_notifier(event, _context):
         req = urllib.request.Request(
             webhook_url,
             data=data,
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "passroute-dlq-notifier/1.0",
+            },
             method="POST",
         )
 
