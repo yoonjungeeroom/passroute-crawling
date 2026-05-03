@@ -397,16 +397,21 @@ class TestDevocean:
 
 
 class TestBlogCollectorHandler:
-    @patch("embedding.embed_text", return_value=[0.1] * 768)
+    @patch("app.boto3")
     @patch("app.S3Storage")
     @patch("collector.tech_blog.TechBlogCollector")
-    def test_saves_new_articles(self, mock_collector_cls, mock_storage_cls, mock_embed):
-        """신규 블로그 글이 S3 에 저장된다."""
+    def test_dispatches_new_articles_to_sqs(
+        self, mock_collector_cls, mock_storage_cls, mock_boto3,
+    ):
+        """신규 블로그 글이 SQS 로 전송된다."""
         import app
 
         mock_storage = MagicMock()
         mock_storage.get_all_urls.return_value = set()
         mock_storage_cls.return_value = mock_storage
+
+        mock_sqs = MagicMock()
+        mock_boto3.client.return_value = mock_sqs
 
         mock_feed = MagicMock()
         mock_collector = MagicMock()
@@ -418,21 +423,29 @@ class TestBlogCollectorHandler:
         result = app.blog_collector({}, None)
 
         body = json.loads(result["body"])
-        assert body["saved"] == 1
+        assert body["new"] == 1
         assert body["skipped"] == 0
-        mock_storage.s3.put_object.assert_called_once()
+        mock_sqs.send_message_batch.assert_called_once()
 
-    @patch("embedding.embed_text", return_value=[0.1] * 768)
+        sent_entry = mock_sqs.send_message_batch.call_args.kwargs["Entries"][0]
+        sent_data = json.loads(sent_entry["MessageBody"])
+        assert sent_data["source"] == "tech_blog"
+        assert sent_data["company_name"] == "카카오"
+
+    @patch("app.boto3")
     @patch("app.S3Storage")
     @patch("collector.tech_blog.TechBlogCollector")
-    def test_skips_existing_urls(self, mock_collector_cls, mock_storage_cls, mock_embed):
-        """이미 저장된 URL 은 스킵한다."""
+    def test_skips_existing_urls(self, mock_collector_cls, mock_storage_cls, mock_boto3):
+        """이미 저장된 URL 은 스킵하고 SQS 전송하지 않는다."""
         import app
 
         mock_storage = MagicMock()
         mock_storage.get_all_urls.return_value = {"https://tech.kakao.com/post/123"}
         mock_storage_cls.return_value = mock_storage
 
+        mock_sqs = MagicMock()
+        mock_boto3.client.return_value = mock_sqs
+
         mock_feed = MagicMock()
         mock_collector = MagicMock()
         mock_collector.feeds = [mock_feed]
@@ -443,36 +456,62 @@ class TestBlogCollectorHandler:
         result = app.blog_collector({}, None)
 
         body = json.loads(result["body"])
-        assert body["saved"] == 0
+        assert body["new"] == 0
         assert body["skipped"] == 1
-        mock_storage.s3.put_object.assert_not_called()
+        mock_sqs.send_message_batch.assert_not_called()
+
+
+# ─────────────────────────────────────────────────────────
+# blog_embedding Lambda 핸들러 테스트
+# ─────────────────────────────────────────────────────────
+
+
+def _make_blog_sqs_event(data: dict) -> dict:
+    return {"Records": [{"body": json.dumps(data)}]}
+
+
+class TestBlogEmbeddingHandler:
+    @patch("embedding.embed_text", return_value=[0.1] * 768)
+    @patch("app.S3Storage")
+    def test_embeds_and_saves_to_s3(self, mock_storage_cls, mock_embed):
+        """블로그 글 1건을 임베딩하여 S3 에 저장한다."""
+        import app
+
+        mock_storage = MagicMock()
+        mock_storage_cls.return_value = mock_storage
+
+        data = blog_article_to_detail_dict(_article())
+        event = _make_blog_sqs_event(data)
+
+        result = app.blog_embedding(event, None)
+
+        assert result["statusCode"] == 200
+        mock_storage.s3.put_object.assert_called_once()
+
+        saved_body = json.loads(
+            mock_storage.s3.put_object.call_args.kwargs["Body"].decode("utf-8"),
+        )
+        assert saved_body["embedding"] == [0.1] * 768
+        assert saved_body["source"] == "tech_blog"
 
     @patch("embedding.embed_text", side_effect=RuntimeError("model error"))
     @patch("app.S3Storage")
-    @patch("collector.tech_blog.TechBlogCollector")
-    def test_saves_without_embedding_on_failure(
-        self, mock_collector_cls, mock_storage_cls, mock_embed,
-    ):
+    def test_saves_without_embedding_on_failure(self, mock_storage_cls, mock_embed):
         """임베딩 실패 시에도 임베딩 없이 S3 에 저장한다."""
         import app
 
         mock_storage = MagicMock()
-        mock_storage.get_all_urls.return_value = set()
         mock_storage_cls.return_value = mock_storage
 
-        mock_feed = MagicMock()
-        mock_collector = MagicMock()
-        mock_collector.feeds = [mock_feed]
-        mock_collector._fetch_feed.return_value = [_article()]
-        mock_collector._fetch_devocean.return_value = []
-        mock_collector_cls.return_value = mock_collector
+        data = blog_article_to_detail_dict(_article())
+        event = _make_blog_sqs_event(data)
 
-        result = app.blog_collector({}, None)
+        result = app.blog_embedding(event, None)
 
-        body = json.loads(result["body"])
-        assert body["saved"] == 1
+        assert result["statusCode"] == 200
         mock_storage.s3.put_object.assert_called_once()
+
         saved_body = json.loads(
-            mock_storage.s3.put_object.call_args.kwargs["Body"].decode("utf-8")
+            mock_storage.s3.put_object.call_args.kwargs["Body"].decode("utf-8"),
         )
         assert "embedding" not in saved_body

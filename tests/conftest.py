@@ -22,3 +22,4 @@ def _set_required_env(monkeypatch):
     """app._required_env 가 던지지 않도록 모든 테스트에 더미 값을 주입."""
     monkeypatch.setenv("S3_BUCKET", "test-bucket")
     monkeypatch.setenv("JOB_DETAIL_QUEUE_URL", "https://sqs.test/detail")
+    monkeypatch.setenv("BLOG_EMBEDDING_QUEUE_URL", "https://sqs.test/blog-embedding")
