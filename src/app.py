@@ -2,7 +2,7 @@
 
 EventBridge cron → [job_list_collector] → SQS → [job_detail_crawler] → S3 → EC2 consumer → ChromaDB
 EventBridge cron → [news_collector] → S3 → EC2 consumer → ChromaDB
-EventBridge cron → [blog_collector] → S3 → EC2 consumer → ChromaDB
+EventBridge cron → [blog_collector] → SQS → [blog_embedding] → S3 → EC2 consumer → ChromaDB
 """
 import json
 import logging
@@ -191,19 +191,20 @@ def news_collector(event, context):
 
 
 def blog_collector(event, context):
-    """주요 기업 기술 블로그 RSS 피드를 수집하여 S3 에 저장.
+    """주요 기업 기술 블로그 RSS 피드를 수집하여 신규 글을 SQS 로 전송.
 
-    피드별로 수집 → 임베딩 → 저장을 순차 처리하여 메모리를 절약한다.
+    임베딩은 별도 Lambda(blog_embedding)가 SQS 트리거로 1건씩 처리한다.
     """
     from collector.tech_blog import TechBlogCollector, blog_article_to_detail_dict  # noqa: C0415
-    from embedding import build_document, embed_text  # noqa: C0415
 
+    sqs = boto3.client("sqs")
+    queue_url = _required_env("BLOG_EMBEDDING_QUEUE_URL")
     storage = _make_storage()
     existing_urls = storage.get_all_urls()
 
     collector = TechBlogCollector()
 
-    saved = 0
+    new_data_list: list[dict] = []
     skipped = 0
 
     for feed in collector.feeds:
@@ -214,23 +215,7 @@ def blog_collector(event, context):
             if article.url in existing_urls:
                 skipped += 1
                 continue
-
-            data = blog_article_to_detail_dict(article)
-
-            try:
-                document = build_document(data["raw_text"], tuple(data["tech_stack"]))
-                embedding = embed_text(document)
-                data["embedding"] = embedding
-            except Exception:
-                logger.exception("임베딩 실패, 임베딩 없이 저장: id=%s", data["external_id"])
-
-            key = f"parsed/{data['source']}/{data['external_id']}.json"
-            storage.s3.put_object(
-                Bucket=storage.bucket,
-                Key=key,
-                Body=json.dumps(data, ensure_ascii=False).encode("utf-8"),
-            )
-            saved += 1
+            new_data_list.append(blog_article_to_detail_dict(article))
             existing_urls.add(article.url)
 
         del articles
@@ -242,11 +227,57 @@ def blog_collector(event, context):
         if article.url in existing_urls:
             skipped += 1
             continue
+        new_data_list.append(blog_article_to_detail_dict(article))
+        existing_urls.add(article.url)
 
-        data = blog_article_to_detail_dict(article)
+    del devocean_articles
+
+    new_count = _dispatch_blog_articles(sqs, queue_url, new_data_list)
+
+    logger.info("블로그 수집 완료: SQS 전송 %d건, 중복 스킵 %d건", new_count, skipped)
+    return {
+        "statusCode": 200,
+        "body": json.dumps({"new": new_count, "skipped": skipped}),
+    }
+
+
+def _dispatch_blog_articles(sqs, queue_url: str, data_list: list[dict]) -> int:
+    """블로그 글 dict 를 BlogEmbeddingQueue 로 배치 전송."""
+    batch: list[dict] = []
+
+    for data in data_list:
+        batch.append({
+            "Id": str(len(batch)),
+            "MessageBody": json.dumps(data, ensure_ascii=False),
+        })
+
+        if len(batch) == SQS_BATCH_SIZE:
+            sqs.send_message_batch(QueueUrl=queue_url, Entries=batch)
+            batch = []
+
+    if batch:
+        sqs.send_message_batch(QueueUrl=queue_url, Entries=batch)
+
+    return len(data_list)
+
+
+# ── Lambda 5: 블로그 임베딩 (SQS 트리거) ──
+
+
+def blog_embedding(event, context):
+    """SQS 트리거. 블로그 글 1건 임베딩 → S3 저장."""
+    from embedding import build_document, embed_text  # noqa: C0415
+
+    storage = _make_storage()
+
+    for record in event["Records"]:
+        data = json.loads(record["body"])
+        logger.info(
+            "블로그 임베딩: %s - %s", data["company_name"], data["title"],
+        )
 
         try:
-            document = build_document(data["raw_text"], tuple(data["tech_stack"]))
+            document = build_document(data["raw_text"], tuple(data.get("tech_stack", [])))
             embedding = embed_text(document)
             data["embedding"] = embedding
         except Exception:
@@ -258,16 +289,9 @@ def blog_collector(event, context):
             Key=key,
             Body=json.dumps(data, ensure_ascii=False).encode("utf-8"),
         )
-        saved += 1
-        existing_urls.add(article.url)
+        logger.info("S3 저장 완료: %s", key)
 
-    del devocean_articles
-
-    logger.info("블로그 수집 완료: 저장 %d건, 중복 스킵 %d건", saved, skipped)
-    return {
-        "statusCode": 200,
-        "body": json.dumps({"saved": saved, "skipped": skipped}),
-    }
+    return {"statusCode": 200}
 
 
 def _process_image_jd(image_detail: ImageJobDetail) -> JobDetail | None:
