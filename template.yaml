@@ -166,17 +166,57 @@ Resources:
       DockerContext: .
       Dockerfile: src/Dockerfile
 
+  # ── SQS: 블로그 임베딩 큐 ──
+  BlogEmbeddingQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: passroute-blog-embedding-queue
+      VisibilityTimeout: 360
+      MessageRetentionPeriod: 86400
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt BlogEmbeddingDLQ.Arn
+        maxReceiveCount: 3
+
+  BlogEmbeddingDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: passroute-blog-embedding-dlq
+      MessageRetentionPeriod: 604800
+
+  BlogEmbeddingDLQAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: passroute-blog-embedding-dlq-has-messages
+      AlarmDescription: passroute blog embedding DLQ에 메시지가 쌓여 있음
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt BlogEmbeddingDLQ.QueueName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref DLQAlarmTopic
+
   # ── Lambda 4: 기술 블로그 수집 (cron) ──
   BlogCollector:
     Type: AWS::Serverless::Function
     Properties:
-      PackageType: Image
+      Runtime: python3.11
+      CodeUri: src/
+      Handler: app.blog_collector
       Timeout: 900
-      MemorySize: 1536
-      ImageConfig:
-        Command:
-          - app.blog_collector
+      MemorySize: 512
+      Environment:
+        Variables:
+          BLOG_EMBEDDING_QUEUE_URL: !Ref BlogEmbeddingQueue
       Policies:
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt BlogEmbeddingQueue.QueueName
         - S3CrudPolicy:
             BucketName: !Ref CrawlerDataBucket
       Events:
@@ -184,7 +224,27 @@ Resources:
           Type: Schedule
           Properties:
             Schedule: cron(0 20 * * ? *)
-            Enabled: false
+            Enabled: true
+
+  # ── Lambda 5: 블로그 임베딩 (SQS 트리거) ──
+  BlogEmbedding:
+    Type: AWS::Serverless::Function
+    Properties:
+      PackageType: Image
+      Timeout: 120
+      MemorySize: 1536
+      ImageConfig:
+        Command:
+          - app.blog_embedding
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref CrawlerDataBucket
+      Events:
+        SQSTrigger:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt BlogEmbeddingQueue.Arn
+            BatchSize: 1
     Metadata:
       DockerTag: python3.11
       DockerContext: .
@@ -233,6 +293,12 @@ Outputs:
   BlogCollectorArn:
     Description: 블로그 수집 Lambda ARN
     Value: !GetAtt BlogCollector.Arn
+  BlogEmbeddingArn:
+    Description: 블로그 임베딩 Lambda ARN
+    Value: !GetAtt BlogEmbedding.Arn
+  BlogEmbeddingQueueUrl:
+    Description: 블로그 임베딩 SQS Queue URL
+    Value: !Ref BlogEmbeddingQueue
   DLQAlarmTopicArn:
     Description: DLQ 알람 SNS 토픽 ARN
     Value: !Ref DLQAlarmTopic
