@@ -71,12 +71,12 @@ def _chunk_by_paragraphs(text: str) -> list[str]:
     return chunks or [text or " "]
 
 
-def embed_text(text: str) -> list[float]:
-    """텍스트를 문단 청킹 + 토큰 수 가중 평균 임베딩으로 변환."""
-    _load_model()
-    np = _np
+_INFERENCE_BATCH_SIZE = 8
 
-    chunks = _chunk_by_paragraphs(text)
+
+def _infer_batch(chunks: list[str]) -> tuple:
+    """chunk 리스트를 토크나이즈 + ONNX 추론하여 (chunk_embeddings, token_counts) 반환."""
+    np = _np
     encoded = _tokenizer(
         chunks, return_tensors="np", padding=True,
         truncation=True, max_length=512,
@@ -97,6 +97,28 @@ def embed_text(text: str) -> list[float]:
     chunk_embeddings = sum_embeddings / sum_mask
 
     token_counts = np.sum(attention_mask, axis=1)
+    return chunk_embeddings, token_counts
+
+
+def embed_text(text: str) -> list[float]:
+    """텍스트를 문단 청킹 + 미니배치 추론 + 토큰 수 가중 평균 임베딩으로 변환."""
+    _load_model()
+    np = _np
+
+    chunks = _chunk_by_paragraphs(text)
+
+    all_chunk_embeddings: list = []
+    all_token_counts: list = []
+
+    for i in range(0, len(chunks), _INFERENCE_BATCH_SIZE):
+        batch = chunks[i:i + _INFERENCE_BATCH_SIZE]
+        chunk_embs, tok_counts = _infer_batch(batch)
+        all_chunk_embeddings.append(chunk_embs)
+        all_token_counts.append(tok_counts)
+
+    chunk_embeddings = np.concatenate(all_chunk_embeddings, axis=0)
+    token_counts = np.concatenate(all_token_counts, axis=0)
+
     weights = token_counts / np.sum(token_counts)
     weighted_embedding = np.sum(
         chunk_embeddings * weights[:, np.newaxis], axis=0,

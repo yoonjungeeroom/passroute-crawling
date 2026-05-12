@@ -119,6 +119,41 @@ Resources:
           Properties:
             Topic: !Ref DLQAlarmTopic
 
+  DLQDailyCheck:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: python3.11
+      CodeUri: src/
+      Handler: notify.dlq_daily_check
+      Timeout: 30
+      MemorySize: 128
+      Environment:
+        Variables:
+          DISCORD_WEBHOOK_URL: !Ref DiscordWebhookUrl
+      Policies:
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt JobDetailDLQ.QueueName
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt BlogEmbeddingDLQ.QueueName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - sqs:GetQueueAttributes
+              Resource:
+                - !GetAtt JobDetailDLQ.Arn
+                - !GetAtt BlogEmbeddingDLQ.Arn
+        - Statement:
+            - Effect: Allow
+              Action:
+                - sts:GetCallerIdentity
+              Resource: "*"
+      Events:
+        DailySchedule:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 21 * * ? *)
+            Enabled: true
+
   JobDetailDLQAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
@@ -136,6 +171,8 @@ Resources:
       ComparisonOperator: GreaterThanThreshold
       TreatMissingData: notBreaching
       AlarmActions:
+        - !Ref DLQAlarmTopic
+      OKActions:
         - !Ref DLQAlarmTopic
 
   # ── Lambda 3: 뉴스 수집 (cron) ──
@@ -200,6 +237,8 @@ Resources:
       ComparisonOperator: GreaterThanThreshold
       TreatMissingData: notBreaching
       AlarmActions:
+        - !Ref DLQAlarmTopic
+      OKActions:
         - !Ref DLQAlarmTopic
 
   # ── Lambda 4: 기술 블로그 수집 (cron) ──
